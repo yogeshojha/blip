@@ -298,6 +298,8 @@ Item {
     if (value.replace(/^\s+|\s+$/g, "").length < minLength) return "too short"
     if (value.length > maxLength) return "too long"
     pending = { text: value, focus: focus === true }
+    // Keep the cached sharing state fresh without holding up the cursor read.
+    if (pauseWhenSharing && !sharingProbe.running) sharingProbe.running = true
     if (!probe.running) probe.running = true
     return "ok"
   }
@@ -313,7 +315,6 @@ Item {
     var y = Math.round(Number(point[1]))
     var window = String(lines[1] || "").split("\t")
     lastApp = window[0] || ""
-    sharing = String(lines[2] || "").indexOf("sharing") === 0
 
     if (!armed || suppressed) return
     if (isBlocked(lastApp) || isBlocked(window[1] || "")) return
@@ -372,8 +373,7 @@ Item {
   }
 
   readonly property string sharingScript: ""
-    + "pgrep -x gpu-screen-recorder >/dev/null && exit 0; "
-    + "pgrep -x wf-recorder >/dev/null && exit 0; "
+    + "pgrep -x 'gpu-screen-recorder|wf-recorder' >/dev/null && exit 0; "
     + "command -v pw-dump >/dev/null || exit 1; "
     + "pw-dump 2>/dev/null | jq -e 'any(.[]?; "
     + ".info.props[\"media.class\"] == \"Stream/Output/Video\" and "
@@ -383,8 +383,7 @@ Item {
     id: probe
     command: ["bash", "-c",
       "hyprctl cursorpos; "
-      + "hyprctl -j activewindow | jq -r '(.class // \"\") + \"\\t\" + (.title // \"\")'; "
-      + "if " + service.sharingScript + "; then echo sharing; else echo clear; fi"]
+      + "hyprctl -j activewindow | jq -r '(.class // \"\") + \"\\t\" + (.title // \"\")'"]
     stdout: StdioCollector {
       id: probeOut
       waitForEnd: true
@@ -726,6 +725,7 @@ Item {
         open: popup.opened,
         keyboard: popup.keyboardActive,
         bound: passiveKeys.bound.length,
+        cursor: [popup.cursorX, popup.cursorY],
         actions: service.catalog.length,
         active: service.activeCatalog.length,
         packs: service.packList.length,
