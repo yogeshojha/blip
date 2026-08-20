@@ -1,0 +1,14 @@
+// Copy to ~/.config/omarchy/blip/actions/, and put an executable
+// slugify.sh in ~/.config/omarchy/blip/scripts/:
+//
+//   tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//'
+[
+  {
+    "id": "me.slugify",
+    "label": "Slugify",
+    "icon": "󰌷",
+    "when": { "types": ["text"], "maxLength": 200 },
+    "run": { "script": "slugify.sh" },
+    "output": "replace"
+  }
+]

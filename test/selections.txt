@@ -1,0 +1,174 @@
+Blip manual selection fixtures
+==============================
+
+Select any line below and the bar should appear over it. Every sample stands
+alone on its line, so a triple click grabs the selection and nothing else.
+
+The bar takes no focus. Escape closes it, the letters on the chips run their
+action, left and right move, Tab shows the overflow, "=" copies an instant
+answer. Up, down and every other key dismiss the bar and reach the window you
+selected in, untouched.
+
+Open this file in an editor and the transforms become edits: a result that
+rewrites the selection shows Replace and Copy, Return pastes it back over the
+text you selected, "c" copies it instead, and Space only ever copies.
+
+Selections shorter than the minimum length setting are ignored, which is why
+every sample here is at least five characters.
+
+
+LINKS AND ADDRESSES
+-------------------
+
+A url gets Open and QR. An email gets Mail and QR. An ip gets Whois, which stays
+hidden until network actions are allowed and asks for consent the first time.
+Search follows the engine picked in the control panel; GitHub always goes to
+GitHub code search.
+
+https://example.com/docs/getting-started?ref=blip#install
+hello@example.com
+192.168.1.42
+2001:0db8:85a3:0000:0000:8a2e:0370:7334
+8.8.8.8
+
+
+TOKENS AND ENCODINGS
+--------------------
+
+A jwt gets Decode with the expiry flagged, and only if its header and payload
+really parse. Base64, percent-encoded and hex selections get Decode, and the
+decoded text offers Replace. Hashes and uuids are recognised but carry the
+plain set.
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJibGlwLW1hbnVhbC10ZXN0IiwibmFtZSI6IkV4cGlyZWQgVG9rZW4iLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6MTcwMDAwMDAwMH0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJibGlwLW1hbnVhbC10ZXN0IiwibmFtZSI6IkxpdmUgVG9rZW4iLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6NDEwMjQ0NDgwMH0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+QmxpcCBkZWNvZGVzIHRoaXMgc2VsZWN0aW9u
+hello%20world%20%26%20friends%3F
+0x1F4A9
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+d41d8cd98f00b204e9800998ecf8427e
+123e4567-e89b-12d3-a456-426614174000
+
+
+STRUCTURED DATA
+---------------
+
+Minified json gets Format, formatted json gets Minify. Either previews the
+result with Replace and Copy: Return rewrites the selection in place, "c"
+copies, Escape backs out.
+
+{"id":42,"name":"blip","tags":["cli","wayland"],"ok":true}
+
+
+REPLACE
+-------
+
+The showpiece. Select a line, run the transform, press Return, and this very
+file changes — the result pastes back over the selection, in whatever app it
+came from. Nothing rewrites your text but a deliberate Return or a click on
+Replace, and the paste only fires if the window you selected in still has
+focus; anywhere else the result stays on the clipboard.
+
+Select the identifier, Tab, snake_case, Return:
+
+getUserProfileData
+
+Kebab to camel and back again, as many times as you like:
+
+background-color-accent
+
+UPPER a whole sentence, then lower it to undo:
+
+make this heading shout
+
+Format lands the pretty version right here in the file:
+
+{"answer":42,"list":[1,2,3],"nested":{"ok":true}}
+
+Decode in place — the encodings below become readable text on Return:
+
+VGhpcyBsaW5lIHdhcyBiYXNlNjQgYSBtb21lbnQgYWdvLg==
+space%20station%20alpha
+
+
+PATHS
+-----
+
+A path gets Open, Edit, Reveal and Terminal here.
+
+~/.config/omarchy/blip/actions
+/usr/share/hypr/stubs/hl.meta.lua
+
+
+INSTANT ANSWERS
+---------------
+
+These are answered on the bar itself, before you press anything. A timestamp
+shows its local time, a sum shows its result, a colour shows its rgb next to a
+live swatch, a measurement shows its conversion. Press "=" to copy the answer.
+
+1516239022
+23*4+18
+(1920 * 1080) / 2
+#1e88e5
+100 mi
+180 lb
+98.6 F
+60 mph
+3 gal
+26.2 mi
+
+
+PLAIN TEXT AND CODE
+-------------------
+
+Anything at all gets Search, GitHub and Ask agent, with Copy and Run behind
+them and the text transforms under Tab: Count, UPPER, lower, Title, snake_case,
+kebab-case, camelCase, To base64, Percent-encode. How many of those reach the
+bar depends on the actions-on-the-bar setting, so a low one leaves the rest
+under Tab.
+
+serendipity
+The quick brown fox jumps over the lazy dog.
+const total = items.reduce((sum, item) => sum + item.price, 0)
+Traceback (most recent call last): FileNotFoundError: no such file
+
+
+MULTILINE
+---------
+
+Select all four lines together.
+
+alpha one
+beta two
+gamma three
+delta four
+
+
+SHOULD NOT MATCH
+----------------
+
+Detection validates rather than guesses, so none of these should get the action
+its shape suggests. Each one falls back to the plain set: "and/or" and "24/7"
+are not paths, a clock is not an ipv6 address, prose that mentions an error is
+not an error, a lowercase word that happens to decode is not base64, a stray
+brace is not json, and three dotted words are not a jwt.
+
+this and/or that
+open 24/7 all week
+12:34:56
+the error message was helpful and clear
+serendipity
+{ this is just a brace in prose
+aaa.bbb.ccc
+
+
+CONFIRM AND RESULT MODES
+------------------------
+
+Run asks before it runs anything. Press "r", then Return to run or Escape to
+cancel. A read-only result — a decoded token, Count, Whois — copies on Return.
+A result that rewrites the selection shows Replace and Copy instead: Return
+replaces, "c" copies, Escape backs out either way.
+
+echo hello-from-blip

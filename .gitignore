@@ -1,0 +1,17 @@
+CLAUDE.md
+MEMORY.md
+AGENTS.md
+.claude/
+.aider*
+.env
+.env.*
+
+__pycache__/
+*.py[cod]
+.venv/
+
+/test/fixtures/
+
+*.swp
+*~
+.DS_Store
