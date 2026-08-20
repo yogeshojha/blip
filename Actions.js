@@ -436,16 +436,25 @@ function percentEncode(value) {
   return encodeURIComponent(String(value === undefined || value === null ? "" : value))
 }
 
+// Argv is execed directly, with no shell to expand a leading tilde for us.
+function expandHome(value, home) {
+  if (!value || !home) return value
+  if (value === "~") return home
+  if (value.slice(0, 2) === "~/") return home + value.slice(1)
+  return value
+}
+
 function variables(detection) {
   var path = detection.meta && detection.meta.path ? detection.meta.path : null
+  var home = detection.home || ""
   return {
     text: detection.text,
     value: detection.value,
     enc: percentEncode(detection.value),
     url: (detection.meta && detection.meta.url) || detection.value,
-    dir: path ? path.dir : "",
+    dir: path ? expandHome(path.dir, home) : "",
     base: path ? path.base : "",
-    path: path ? path.path : "",
+    path: path ? expandHome(path.path, home) : "",
     line: path && path.line ? String(path.line) : "",
     type: detection.primary
   }

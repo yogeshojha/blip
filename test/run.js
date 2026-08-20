@@ -228,6 +228,17 @@ equal("template base", Actions.expand("${base}", detection), "nginx.conf")
 equal("template percent-encoding", Actions.expand("${enc}", Detect.detect("a b&c")), "a%20b%26c")
 equal("unknown placeholders are left alone", Actions.expand("${nope}", detection), "${nope}")
 
+const tilde = Detect.detect("~/.config/omarchy/blip/actions")
+tilde.home = "/home/tester"
+equal("tilde path expands", Actions.expand("${path}", tilde), "/home/tester/.config/omarchy/blip/actions")
+equal("tilde dir expands", Actions.expand("${dir}", tilde), "/home/tester/.config/omarchy/blip")
+equal("tilde base is untouched", Actions.expand("${base}", tilde), "actions")
+const shallow = Detect.detect("~/notes")
+shallow.home = "/home/tester"
+equal("tilde one level deep expands", Actions.expand("${path}", shallow), "/home/tester/notes")
+equal("absolute path is untouched", Actions.expand("${path}", detection), "/etc/nginx/nginx.conf")
+equal("tilde is left alone with no home", Actions.expand("${path}", Detect.detect("~/.config/blip")), "~/.config/blip")
+
 const remote = catalog.filter(function(action) { return action.id === "u.remote" })[0]
 equal("host is read out of the command", Actions.hostOf(remote, Detect.detect("x")), "api.example.com")
 

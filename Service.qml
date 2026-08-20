@@ -321,6 +321,7 @@ Item {
 
     var detection = Detect.detect(request.text)
     detection.primaryLabel = Detect.label(detection.primary)
+    detection.home = home
 
     var menu = Actions.build(activeCatalog, detection, {
       app: lastApp,
