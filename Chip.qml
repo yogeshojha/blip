@@ -19,7 +19,9 @@ Item {
   readonly property bool isOverflow: overflowGlyph !== ""
   readonly property string glyph: isOverflow ? overflowGlyph : (action ? String(action.icon || "") : "")
   readonly property string label: isOverflow ? "" : (action ? String(action.label || "") : "")
-  readonly property string accelerator: !isOverflow && showKey && action ? String(action.accelerator || "") : ""
+  readonly property string accelerator: showKey
+    ? (isOverflow ? "⇥" : (action ? String(action.accelerator || "") : ""))
+    : ""
 
   readonly property color ink: Color.popups.text
   readonly property color faint: Util.alpha(ink, 0.45)

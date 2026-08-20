@@ -710,6 +710,7 @@ Item {
         id: moreChip
         visible: root.hasOverflow
         overflowGlyph: "⋯"
+        showKey: root.keysLive
         selected: root.moreSelected
         paintSelection: false
         onHovered: root.index = root.visibleActions.length
