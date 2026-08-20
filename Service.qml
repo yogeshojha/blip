@@ -138,6 +138,7 @@ Item {
 
   property string selection: ""
   property string lastApp: ""
+  property string lastWindow: ""
   property bool sharing: false
   property bool skipFirstEvent: true
   property var pending: null
@@ -344,6 +345,7 @@ Item {
     var y = Math.round(Number(point[1]))
     var window = String(lines[1] || "").split("\t")
     lastApp = window[0] || ""
+    lastWindow = window[2] || ""
 
     if (!armed || suppressed) return
     if (isBlocked(lastApp) || isBlocked(window[1] || "")) return
@@ -414,7 +416,7 @@ Item {
     id: probe
     command: ["bash", "-c",
       "hyprctl cursorpos; "
-      + "hyprctl -j activewindow | jq -r '(.class // \"\") + \"\\t\" + (.title // \"\")'"]
+      + "hyprctl -j activewindow | jq -r '(.class // \"\") + \"\\t\" + (.title // \"\") + \"\\t\" + (.address // \"\")'"]
     stdout: StdioCollector {
       id: probeOut
       waitForEnd: true
@@ -557,6 +559,10 @@ Item {
       runner.copyText(text)
       popup.flash("Copied")
     }
+    onReplaceRequested: function(text) {
+      popup.close()
+      runner.replaceText(text)
+    }
   }
 
   Runner {
@@ -566,11 +572,13 @@ Item {
     onCompleted: function(action, payload) {
       if (!popup.busy) return
       if (!payload.ok) {
-        popup.showResult({ title: "Failed", body: payload.body || "No output", tone: "urgent", render: "text" })
+        popup.showResult({ title: "Failed", body: payload.body || "No output",
+          copy: payload.copy || "No output", tone: "urgent", render: "text" })
         return
       }
       switch (action.output) {
       case "show":
+      case "edit":
         if (!payload.body.length) { popup.flash("Nothing to show"); return }
         popup.showResult(payload)
         return
@@ -579,9 +587,8 @@ Item {
         popup.flash("Copied")
         return
       case "replace":
-        runner.copyText(payload.copy)
         popup.close()
-        runner.pasteBack()
+        runner.replaceText(payload.copy)
         return
       }
       if (action.keepOpen) popup.busy = false

@@ -33,6 +33,7 @@ Item {
 
   signal runRequested(var action)
   signal copyRequested(string text)
+  signal replaceRequested(string text)
 
   readonly property var rows: expanded ? visibleActions.concat(overflowActions) : visibleActions
   readonly property bool hasOverflow: overflowActions.length > 0
@@ -40,6 +41,7 @@ Item {
   readonly property bool moreSelected: moreReachable && index === rows.length
   readonly property string mode: result ? "result" : (pendingConfirm ? "confirm" : "actions")
   readonly property bool resultIsQr: !!result && result.render === "qr"
+  readonly property bool resultCanReplace: !!result && result.replace === true
   readonly property bool confirmNetwork: !!pendingConfirm && pendingConfirm.needsConsent === true
   readonly property string typeLabel: detection ? String(detection.primaryLabel || "") : ""
 
@@ -164,6 +166,7 @@ Item {
 
   function showResult(payload) {
     busy = false
+    replaced = false
     result = payload
     holdKeyboard()
   }
@@ -176,8 +179,20 @@ Item {
 
   // Routed in from the service's binds; each mirrors a branch of the focused handler.
   function pressReturn() {
-    if (result) { copyRequested(result.copy); return true }
+    if (result) {
+      if (!replaceResult()) copyRequested(result.copy)
+      return true
+    }
     activate()
+    return true
+  }
+
+  property bool replaced: false
+
+  function replaceResult() {
+    if (!resultCanReplace || replaced) return false
+    replaced = true
+    replaceRequested(result.copy)
     return true
   }
 
@@ -208,8 +223,10 @@ Item {
     return true
   }
 
+  // Also drops the result: Enter during the notice must not fire a replace.
   function flash(message) {
     busy = false
+    result = null
     notice = message
     dwellTimer.stop()
     noticeTimer.restart()
@@ -264,7 +281,8 @@ Item {
     onTriggered: root.morphEnabled = root.opened
   }
 
-  readonly property bool watchingAway: opened && !keyboardActive && mode === "actions" && !busy && !hover.hovered
+  readonly property bool watchingAway: opened && !keyboardActive
+    && (mode === "actions" || mode === "result") && !busy && !hover.hovered
 
   function checkAway(raw) {
     if (!watchingAway) return
@@ -346,14 +364,19 @@ Item {
 
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) { root.back(); event.accepted = true; return }
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
-          if (root.result) root.copyRequested(root.result.copy)
-          else root.activate()
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+          root.pressReturn()
+          event.accepted = true
+          return
+        }
+        // Space stays a copy: a reflex press must never rewrite the selection.
+        if (event.key === Qt.Key_Space) {
+          if (!root.copyResult()) root.activate()
           event.accepted = true
           return
         }
         if (root.result) {
-          if (event.text === "c") { root.copyRequested(root.result.copy); event.accepted = true }
+          if (event.text === "c") { root.copyResult(); event.accepted = true }
           return
         }
         if (root.pendingConfirm) return
@@ -881,11 +904,38 @@ Item {
       }
 
       Text {
+        visible: !root.resultCanReplace
         anchors.horizontalCenter: root.resultIsQr ? parent.horizontalCenter : undefined
         text: root.resultIsQr ? "Enter to copy the link · Esc to close" : "Enter to copy · Esc to close"
         color: root.faint
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
+      }
+
+      Row {
+        visible: root.resultCanReplace
+        spacing: Style.spacing.sm
+
+        Chip {
+          action: ({ label: "Replace", accelerator: "⏎" })
+          selected: true
+          showKey: true
+          onClicked: root.replaceResult()
+        }
+
+        Chip {
+          action: ({ label: "Copy", accelerator: "c" })
+          showKey: true
+          onClicked: root.copyResult()
+        }
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: "Esc closes"
+          color: root.faint
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+        }
       }
     }
   }

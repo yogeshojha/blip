@@ -15,6 +15,13 @@ Unix timestamp shows its local time, `23*4+18` shows `= 110`, `#1e88e5` shows
 `rgb(30, 136, 229)` next to a live swatch, `100 mi` shows `→ 160.93 km`. Click
 the answer, or press `=`, to copy it.
 
+The transforms write back. Select `helloWorld` in your editor, pick
+`snake_case`, press `Enter`, and the buffer now reads `hello_world`: the result
+pastes over the selection in the app it came from. Formatted JSON lands back in
+the file it was minified in, decoded base64 lands where the blob was. `c`
+copies instead, `Esc` walks away, and the result is on the clipboard either
+way, so a window that cannot take the paste costs you nothing.
+
 ## Install
 
 ```bash
@@ -55,7 +62,11 @@ sends your message, and typing carries on where it was going.
 ![Every action for a plain sentence](screenshots/all-actions.png)
 
 In a result (a decoded token, a formatted document, a QR code), `Enter` copies
-and `Esc` closes.
+and `Esc` closes. When the result rewrites the selection — a case change,
+formatted JSON, a decode — the card shows the result with **Replace** and
+**Copy**: `Enter` pastes it back over the text you selected, `c` copies it
+instead. A stray `Space` only ever copies; nothing rewrites your text but a
+deliberate `Enter` or a click on Replace.
 
 ## What ships
 
@@ -70,7 +81,7 @@ and `Esc` closes.
 | base64 / hex / percent-encoded | Decode |
 | epoch | Local time |
 | path | Open · Edit · Reveal · Terminal here |
-| text | Count · UPPER · lower · Title · To base64 · Percent-encode |
+| text | Count · UPPER · lower · Title · snake_case · kebab-case · camelCase · To base64 · Percent-encode |
 
 `Run` asks before it runs anything. `Whois` stays hidden until you allow
 network actions.

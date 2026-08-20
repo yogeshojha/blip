@@ -45,7 +45,8 @@ Item {
       body: String(result.body || ""),
       copy: String(copy),
       tone: String(result.tone || ""),
-      render: render
+      render: render,
+      replace: render !== "qr" && !!action && action.output === "edit"
     })
   }
 
@@ -55,8 +56,20 @@ Item {
     clip.running = true
   }
 
-  function pasteBack() {
-    Quickshell.execDetached(["bash", "-c", "sleep 0.2; wtype -M shift -k Insert -m shift"])
+  // One process, in order: the clipboard is claimed before the chord fires,
+  // and the text reaches wl-copy on stdin, never through the process table.
+  // The sleep is for focus, and the chord only fires if the window that owned
+  // the selection has it back — anywhere else, the paste stays a copy.
+  function replaceText(text) {
+    paste.payload = String(text || "")
+    paste.command = ["bash", "-c",
+      'wl-copy && sleep 0.2'
+      + ' && { [ -z "$0" ] || [ "$(hyprctl -j activewindow | jq -r .address)" = "$0" ]; }'
+      + ' && exec "$@"',
+      service ? String(service.lastWindow || "") : ""]
+      .concat(Actions.pasteChord(service ? service.lastApp : ""))
+    paste.stdinEnabled = true
+    paste.running = true
   }
 
   function scriptPath(action) {
@@ -139,16 +152,32 @@ Item {
     }
   }
 
+  function feed(proc) {
+    proc.write(proc.payload)
+    proc.stdinEnabled = false
+    proc.payload = ""
+  }
+
   Process {
     id: clip
 
     property string payload: ""
 
     command: ["wl-copy"]
-    onStarted: {
-      write(payload)
-      stdinEnabled = false
-      payload = ""
+    onStarted: runner.feed(clip)
+  }
+
+  Process {
+    id: paste
+
+    property string payload: ""
+
+    onStarted: runner.feed(paste)
+    stderr: StdioCollector { id: pasteErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0)
+        console.warn("blip: replace did not paste; the result is on the clipboard "
+          + String(pasteErr.text || "").trim())
     }
   }
 }

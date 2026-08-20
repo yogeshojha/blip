@@ -16,7 +16,7 @@
     "priority": -12,
     "when": { "types": ["*"], "maxLength": 8000 },
     "run": { "builtin": "case.upper" },
-    "output": "copy"
+    "output": "edit"
   },
   {
     "id": "blip.case.lower",
@@ -25,7 +25,7 @@
     "priority": -13,
     "when": { "types": ["*"], "maxLength": 8000 },
     "run": { "builtin": "case.lower" },
-    "output": "copy"
+    "output": "edit"
   },
   {
     "id": "blip.case.title",
@@ -34,24 +34,51 @@
     "priority": -14,
     "when": { "types": ["*"], "maxLength": 8000 },
     "run": { "builtin": "case.title" },
-    "output": "copy"
+    "output": "edit"
+  },
+  {
+    "id": "blip.case.snake",
+    "label": "snake_case",
+    "icon": "󰬴",
+    "priority": -15,
+    "when": { "types": ["*"], "maxLength": 8000 },
+    "run": { "builtin": "case.snake" },
+    "output": "edit"
+  },
+  {
+    "id": "blip.case.kebab",
+    "label": "kebab-case",
+    "icon": "󰬴",
+    "priority": -16,
+    "when": { "types": ["*"], "maxLength": 8000 },
+    "run": { "builtin": "case.kebab" },
+    "output": "edit"
+  },
+  {
+    "id": "blip.case.camel",
+    "label": "camelCase",
+    "icon": "󰬴",
+    "priority": -17,
+    "when": { "types": ["*"], "maxLength": 8000 },
+    "run": { "builtin": "case.camel" },
+    "output": "edit"
   },
   {
     "id": "blip.base64.encode",
     "label": "To base64",
     "icon": "󰯄",
-    "priority": -16,
+    "priority": -18,
     "when": { "types": ["*"], "notTypes": ["base64", "jwt"], "maxLength": 8000 },
     "run": { "builtin": "base64.encode" },
-    "output": "copy"
+    "output": "edit"
   },
   {
     "id": "blip.url.encode",
     "label": "Percent-encode",
     "icon": "󰯄",
-    "priority": -17,
+    "priority": -19,
     "when": { "types": ["*"], "notTypes": ["urlencoded"], "maxLength": 8000 },
     "run": { "builtin": "url.encode" },
-    "output": "copy"
+    "output": "edit"
   }
 ]

@@ -263,6 +263,25 @@ equal("unknown placeholders drop out of a search template",
 const remote = catalog.filter(function(action) { return action.id === "u.remote" })[0]
 equal("host is read out of the command", Actions.hostOf(remote, Detect.detect("x")), "api.example.com")
 
+// Replace
+
+const termChord = "wtype -M ctrl -M shift -k v -m shift -m ctrl"
+const guiChord = "wtype -M ctrl -k v -m ctrl"
+equal("terminals paste with ctrl+shift+v", Actions.pasteChord("com.mitchellh.ghostty").join(" "), termChord)
+equal("terminal matching ignores case", Actions.pasteChord("Alacritty").join(" "), termChord)
+equal("foot's client counts as foot", Actions.pasteChord("footclient").join(" "), termChord)
+equal("terminator is a terminal", Actions.pasteChord("terminator").join(" "), termChord)
+equal("ptyxis is a terminal", Actions.pasteChord("org.gnome.Ptyxis").join(" "), termChord)
+equal("gui apps paste with ctrl+v", Actions.pasteChord("firefox").join(" "), guiChord)
+equal("sublime is not mistaken for a terminal", Actions.pasteChord("sublime_text").join(" "), guiChord)
+equal("no app defaults to the gui chord", Actions.pasteChord("").join(" "), guiChord)
+
+const outputs = Actions.loadCatalog(scan("builtin", "/p/actions/o.jsonc",
+  '[{"id":"o.edit","label":"E","run":{"builtin":"case.upper"},"output":"edit"},'
+  + '{"id":"o.odd","label":"O","run":{"builtin":"copy"},"output":"banana"}]'))
+equal("output edit survives normalization", outputs.entries[0].output, "edit")
+equal("an unknown output falls back to none", outputs.entries[1].output, "none")
+
 // Packs
 
 const withPacks = Actions.loadCatalog([
@@ -456,6 +475,26 @@ const hosted = Actions.loadCatalog(scan("user", "/u/actions/net.jsonc",
   '[{"id":"n.api","label":"Lookup","network":true,"host":"api.example.org","when":{"types":["*"]},"run":{"script":"x.sh"}}]')).entries[0]
 equal("a declared host survives normalization", hosted.host, "api.example.org")
 equal("a declared host feeds the consent dialog", Actions.hostOf(hosted, Detect.detect("x")), "api.example.org")
+
+function shippedOutput(id) {
+  const found = shippedCatalog.filter(function(action) { return action.id === id })[0]
+  return found ? found.output : ""
+}
+
+equal("UPPER offers the replace choice", shippedOutput("blip.case.upper"), "edit")
+equal("snake_case ships and offers it too", shippedOutput("blip.case.snake"), "edit")
+equal("kebab-case ships", shippedOutput("blip.case.kebab"), "edit")
+equal("camelCase ships", shippedOutput("blip.case.camel"), "edit")
+equal("formatted json offers the replace choice", shippedOutput("blip.json.format"), "edit")
+equal("decoded base64 offers the replace choice", shippedOutput("blip.base64.decode"), "edit")
+equal("a jwt decode stays read-only", shippedOutput("blip.jwt.decode"), "show")
+equal("count stays read-only", shippedOutput("blip.count"), "show")
+equal("copy is still just a copy", shippedOutput("blip.copy"), "copy")
+
+const caseMenu = Actions.build(shippedCatalog, Detect.detect("hello sailor"), { limit: 6 })
+includes("the new case tools reach the menu", ids(caseMenu), "blip.case.snake")
+includes("kebab reaches the menu", ids(caseMenu), "blip.case.kebab")
+includes("camel reaches the menu", ids(caseMenu), "blip.case.camel")
 
 const ipMenu = Actions.build(shippedCatalog, Detect.detect("8.8.8.8"), { limit: 6 })
 excludes("whois hides until network actions are allowed", ids(ipMenu), "blip.ip.whois")

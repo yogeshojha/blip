@@ -183,7 +183,16 @@ DuckDuckGo.
 | `none` | fire and forget, the default |
 | `copy` | put the result on the clipboard |
 | `show` | display it in the popup |
-| `replace` | copy it and paste it back over the selection |
+| `edit` | display it, then Enter pastes it back over the selection, `c` copies |
+| `replace` | copy it and paste it back over the selection, no questions asked |
+
+The two pasting outputs use the focused app's own chord — Ctrl+Shift+V in a
+terminal, Ctrl+V everywhere else — and only paste if the window the selection
+came from still has focus. The result is on the clipboard either way, so a
+paste that cannot land still costs nothing. The shipped
+transforms that rewrite text (the case tools, JSON format, the decoders) are
+all `edit`: the popup previews the result, Enter puts it where the selection
+was, and reading transforms like Count or a JWT decode stay `show`.
 
 Plus `icon`, `description`, `key` to pin an accelerator, `confirm: true` to ask
 first, `network: true` to declare that the action sends the selection off this

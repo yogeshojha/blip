@@ -9,6 +9,10 @@ action, left and right move, Tab shows the overflow, "=" copies an instant
 answer. Up, down and every other key dismiss the bar and reach the window you
 selected in, untouched.
 
+Open this file in an editor and the transforms become edits: a result that
+rewrites the selection shows Replace and Copy, Return pastes it back over the
+text you selected, "c" copies it instead, and Space only ever copies.
+
 Selections shorter than the minimum length setting are ignored, which is why
 every sample here is at least five characters.
 
@@ -32,8 +36,9 @@ TOKENS AND ENCODINGS
 --------------------
 
 A jwt gets Decode with the expiry flagged, and only if its header and payload
-really parse. Base64, percent-encoded and hex selections get Decode. Hashes and
-uuids are recognised but carry the plain set.
+really parse. Base64, percent-encoded and hex selections get Decode, and the
+decoded text offers Replace. Hashes and uuids are recognised but carry the
+plain set.
 
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJibGlwLW1hbnVhbC10ZXN0IiwibmFtZSI6IkV4cGlyZWQgVG9rZW4iLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6MTcwMDAwMDAwMH0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJibGlwLW1hbnVhbC10ZXN0IiwibmFtZSI6IkxpdmUgVG9rZW4iLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6NDEwMjQ0NDgwMH0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
@@ -48,10 +53,42 @@ d41d8cd98f00b204e9800998ecf8427e
 STRUCTURED DATA
 ---------------
 
-Minified json gets Format, formatted json gets Minify. Either lands in the
-result mode, where Return and "c" copy and Escape backs out.
+Minified json gets Format, formatted json gets Minify. Either previews the
+result with Replace and Copy: Return rewrites the selection in place, "c"
+copies, Escape backs out.
 
 {"id":42,"name":"blip","tags":["cli","wayland"],"ok":true}
+
+
+REPLACE
+-------
+
+The showpiece. Select a line, run the transform, press Return, and this very
+file changes — the result pastes back over the selection, in whatever app it
+came from. Nothing rewrites your text but a deliberate Return or a click on
+Replace, and the paste only fires if the window you selected in still has
+focus; anywhere else the result stays on the clipboard.
+
+Select the identifier, Tab, snake_case, Return:
+
+getUserProfileData
+
+Kebab to camel and back again, as many times as you like:
+
+background-color-accent
+
+UPPER a whole sentence, then lower it to undo:
+
+make this heading shout
+
+Format lands the pretty version right here in the file:
+
+{"answer":42,"list":[1,2,3],"nested":{"ok":true}}
+
+Decode in place — the encodings below become readable text on Return:
+
+VGhpcyBsaW5lIHdhcyBiYXNlNjQgYSBtb21lbnQgYWdvLg==
+space%20station%20alpha
 
 
 PATHS
@@ -86,9 +123,10 @@ PLAIN TEXT AND CODE
 -------------------
 
 Anything at all gets Search, GitHub and Ask agent, with Copy and Run behind
-them and the text transforms under Tab: Count, UPPER, lower, Title, To base64,
-Percent-encode. How many of those reach the bar depends on the actions-on-the-bar
-setting, so a low one leaves the rest under Tab.
+them and the text transforms under Tab: Count, UPPER, lower, Title, snake_case,
+kebab-case, camelCase, To base64, Percent-encode. How many of those reach the
+bar depends on the actions-on-the-bar setting, so a low one leaves the rest
+under Tab.
 
 serendipity
 The quick brown fox jumps over the lazy dog.
@@ -129,7 +167,8 @@ CONFIRM AND RESULT MODES
 ------------------------
 
 Run asks before it runs anything. Press "r", then Return to run or Escape to
-cancel. Decoding a token or formatting the json above lands in the result mode,
-where Return and "c" copy the result and Escape backs out to the actions.
+cancel. A read-only result — a decoded token, Count, Whois — copies on Return.
+A result that rewrites the selection shows Replace and Copy instead: Return
+replaces, "c" copies, Escape backs out either way.
 
 echo hello-from-blip

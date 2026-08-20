@@ -113,7 +113,7 @@
     "priority": 40,
     "when": { "types": ["json"] },
     "run": { "builtin": "json.format" },
-    "output": "show"
+    "output": "edit"
   },
   {
     "id": "blip.json.minify",
@@ -122,7 +122,7 @@
     "priority": -4,
     "when": { "types": ["json"] },
     "run": { "builtin": "json.minify" },
-    "output": "copy"
+    "output": "edit"
   },
   {
     "id": "blip.base64.decode",
@@ -132,7 +132,7 @@
     "priority": 35,
     "when": { "types": ["base64"] },
     "run": { "builtin": "base64.decode" },
-    "output": "show"
+    "output": "edit"
   },
   {
     "id": "blip.hex.decode",
@@ -141,7 +141,7 @@
     "priority": 30,
     "when": { "types": ["hex"], "notTypes": ["hash", "color"] },
     "run": { "builtin": "hex.decode" },
-    "output": "show"
+    "output": "edit"
   },
   {
     "id": "blip.urlencoded.decode",
@@ -151,7 +151,7 @@
     "priority": 35,
     "when": { "types": ["urlencoded"] },
     "run": { "builtin": "url.decode" },
-    "output": "show"
+    "output": "edit"
   },
   {
     "id": "blip.epoch.local",

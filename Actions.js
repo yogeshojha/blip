@@ -1,6 +1,6 @@
 var ORIGIN_RANK = { builtin: 0, pack: 1, user: 2 }
 var RUN_KINDS = ["builtin", "exec", "script", "ipc"]
-var OUTPUTS = ["none", "copy", "replace", "show"]
+var OUTPUTS = ["none", "copy", "replace", "show", "edit"]
 var ACCELERATORS = "asdfghjklqwertyuiopzxcvbnm1234567890"
 
 function trim(value) {
@@ -483,6 +483,22 @@ function expandArgv(argv, detection) {
   var out = []
   for (var i = 0; i < argv.length; i++) out.push(expand(argv[i], detection))
   return out
+}
+
+var TERMINAL_APPS = [
+  "alacritty", "blackbox", "contour", "foot", "ghostty", "kitty", "konsole",
+  "lxterminal", "ptyxis", "qterminal", "rio", "sakura", "st-256color",
+  "terminal", "terminator", "terminology", "tilix", "urxvt", "wezterm",
+  "xterm", "yakuake"
+]
+
+// Terminals paste the clipboard with Ctrl+Shift+V; Shift+Insert and Ctrl+V
+// mean other things there, and Shift+Insert reads the primary selection,
+// which still holds the very text being replaced.
+function pasteChord(app) {
+  if (appMatches(TERMINAL_APPS, app))
+    return ["wtype", "-M", "ctrl", "-M", "shift", "-k", "v", "-m", "shift", "-m", "ctrl"]
+  return ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"]
 }
 
 function hostOf(action, detection) {
