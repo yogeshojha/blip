@@ -14,6 +14,8 @@ Panel {
   readonly property bool suppressed: blip ? blip.suppressed : false
   readonly property bool visibleIndicator: blip ? blip.showIndicator : true
   readonly property var modules: blip ? blip.modules : []
+  readonly property var packs: blip ? blip.packList : []
+  property string installNote: ""
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -67,6 +69,9 @@ Panel {
       for (var a = 0; a < modules[m].actions.length; a++)
         rows.push({ kind: "action", id: modules[m].actions[a].id, action: modules[m].actions[a] })
     }
+    rows.push({ kind: "packinstall", id: "install" })
+    for (var p = 0; p < packs.length; p++)
+      rows.push({ kind: "pack", id: packs[p].name, pack: packs[p] })
     rows.push({ kind: "button", id: "reload" })
     rows.push({ kind: "button", id: "folder" })
     rows.push({ kind: "button", id: "forget" })
@@ -100,9 +105,25 @@ Panel {
     else if (row.kind === "toggle") flipToggle(row.id)
     else if (row.kind === "module") toggleModule(row.module)
     else if (row.kind === "action") blip.setActionEnabled(row.id, !blip.isActionEnabled(row.id))
+    else if (row.kind === "packinstall") installField.forceActiveFocus()
+    else if (row.kind === "pack") notePackResult(blip.packUpdate(row.id))
     else if (row.kind === "button" && row.id === "reload") blip.rescan()
     else if (row.kind === "button" && row.id === "folder") blip.openActionsDir()
     else if (row.kind === "button" && row.id === "forget") blip.forgetConsent()
+  }
+
+  // Every pack operation reports through here, so a refused one (busy,
+  // bad url) surfaces in the panel instead of vanishing into a return value.
+  function notePackResult(result) {
+    installNote = String(result).indexOf("error:") === 0 ? String(result).slice(7).replace(/^\s+/, "") : ""
+    return installNote === ""
+  }
+
+  function submitPackInstall() {
+    if (!blip) return
+    if (!notePackResult(blip.packAdd(installField.text))) return
+    installField.text = ""
+    keyCatcher.forceActiveFocus()
   }
 
   function adjustCursor(dx) {
@@ -216,6 +237,8 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      // While the install field is being typed into, every key belongs to it.
+      blocked: installField.activeFocus
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
         if (dy !== 0) root.moveCursor(dy)
@@ -224,8 +247,21 @@ Panel {
       onActivateRequested: if (root.cursorActive) root.activateCursor()
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
+      onDeleteRequested: {
+        var row = root.cursorRow
+        if (row && row.kind === "pack" && root.blip) root.notePackResult(root.blip.packRemove(row.id))
+      }
       onTextKey: function(t) {
         if (t === "r" || t === "R") { if (root.blip) root.blip.rescan() }
+        else if (t === "g") {
+          root.cursorActive = true
+          root.cursor = 0
+          flick.contentY = 0
+        } else if (t === "G") {
+          root.cursorActive = true
+          root.cursor = root.navRows.length - 1
+          flick.contentY = Math.max(0, flick.contentHeight - flick.height)
+        }
       }
 
       Flickable {
@@ -249,6 +285,9 @@ Panel {
             width: parent.width
             implicitHeight: hero.implicitHeight
             readonly property bool ringVisible: root.cursorId === "hero:hero"
+            // The hero is not a CursorSurface, so it needs its own scroll
+            // hook or arriving here from below leaves the view stranded.
+            onRingVisibleChanged: if (ringVisible) root.scrollItemIntoView(heroBlock)
             function focusHero() { root.setCursorTo("hero", "hero") }
 
             PanelHero {
@@ -371,6 +410,108 @@ Panel {
                   width: column.width
                   action: modelData
                 }
+              }
+            }
+          }
+
+          PanelSeparator { foreground: root.foreground }
+
+          PanelSectionHeader {
+            text: "PACKS"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+          }
+
+          CursorSurface {
+            id: installRow
+            width: parent.width
+            hasCursor: root.cursorId === "packinstall:install" && !installField.activeFocus
+            foreground: root.foreground
+            implicitHeight: installContent.implicitHeight + Style.space(12)
+
+            onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(installRow)
+
+            MouseArea {
+              anchors.fill: parent
+              hoverEnabled: true
+              acceptedButtons: Qt.NoButton
+              onEntered: root.setCursorTo("packinstall", "install")
+            }
+
+            Row {
+              id: installContent
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.leftMargin: Style.space(10)
+              anchors.rightMargin: Style.space(10)
+              spacing: Style.space(8)
+
+              TextField {
+                id: installField
+                width: parent.width - installButton.implicitWidth - parent.spacing
+                anchors.verticalCenter: parent.verticalCenter
+                placeholderText: "https://github.com/…/blip-pack-…"
+                foreground: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                enabled: !(root.blip && root.blip.packBusy)
+                onAccepted: root.submitPackInstall()
+                onTextChanged: root.installNote = ""
+                Keys.onEscapePressed: keyCatcher.forceActiveFocus()
+              }
+
+              Button {
+                id: installButton
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Install"
+                iconText: "󰇚"
+                bordered: true
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                enabled: installField.text.length > 0 && !(root.blip && root.blip.packBusy)
+                onClicked: root.submitPackInstall()
+              }
+            }
+          }
+
+          Text {
+            visible: text !== ""
+            width: parent.width
+            // A running operation always narrates; a stale validation note
+            // must not mask it.
+            text: root.blip && root.blip.packBusy ? root.blip.packStatus
+              : (root.installNote !== "" ? root.installNote : (root.blip ? root.blip.packStatus : ""))
+            color: (root.blip && root.blip.packBusy) ? root.dim
+              : (root.installNote !== "" || (root.blip && root.blip.packStatusUrgent) ? root.urgent : root.dim)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WrapAnywhere
+            maximumLineCount: 2
+            elide: Text.ElideRight
+          }
+
+          Text {
+            visible: root.packs.length === 0
+            width: parent.width
+            text: "None yet. Paste a git URL above — a pack is a repo with actions/*.jsonc and scripts/."
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(4)
+
+            Repeater {
+              model: root.packs
+
+              PackRow {
+                width: parent.width
+                pack: modelData
               }
             }
           }
@@ -704,6 +845,93 @@ Panel {
         cursorRing: false
         trackHeight: Style.space(16)
         foreground: root.foreground
+      }
+    }
+  }
+
+  component PackRow: CursorSurface {
+    id: packRow
+
+    property var pack: null
+    readonly property string packName: pack ? String(pack.name) : ""
+
+    hasCursor: root.cursorId === "pack:" + packName
+    foreground: root.foreground
+    implicitHeight: packContent.implicitHeight + Style.space(12)
+
+    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(packRow)
+
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      acceptedButtons: Qt.NoButton
+      onEntered: root.setCursorTo("pack", packRow.packName)
+    }
+
+    Row {
+      id: packContent
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(10)
+      spacing: Style.space(8)
+
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        text: "󰏗"
+        color: root.foreground
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.icon
+      }
+
+      Column {
+        width: parent.width - Style.font.icon - updateButton.width - removeButton.width - parent.spacing * 3
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(1)
+
+        Text {
+          width: parent.width
+          text: packRow.packName
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.subtitle
+          font.bold: true
+          elide: Text.ElideRight
+        }
+
+        Text {
+          width: parent.width
+          text: (packRow.pack ? packRow.pack.actions : 0)
+            + (packRow.pack && packRow.pack.actions === 1 ? " action" : " actions")
+            + " · Enter updates · x removes"
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          elide: Text.ElideRight
+        }
+      }
+
+      PanelActionButton {
+        id: updateButton
+        anchors.verticalCenter: parent.verticalCenter
+        iconText: "󰑐"
+        tooltipText: "git pull this pack"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        enabled: !(root.blip && root.blip.packBusy)
+        onClicked: if (root.blip) root.notePackResult(root.blip.packUpdate(packRow.packName))
+      }
+
+      PanelActionButton {
+        id: removeButton
+        anchors.verticalCenter: parent.verticalCenter
+        iconText: "󰩺"
+        tooltipText: "Remove this pack"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        enabled: !(root.blip && root.blip.packBusy)
+        onClicked: if (root.blip) root.notePackResult(root.blip.packRemove(packRow.packName))
       }
     }
   }

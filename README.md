@@ -98,7 +98,9 @@ is the full reference.
 
 Click the bar icon for the armed switch, the behaviour toggles, the tuning
 sliders, and a switch for every module and every action, so you can turn off
-the text tools, or just `Run`, without touching a file. It is fully
+the text tools, or just `Run`, without touching a file. The PACKS section
+installs action packs from a pasted git URL and updates or removes the ones
+you have — see [ACTIONS.md](ACTIONS.md#action-packs). It is fully
 keyboard-driven. Right-click the icon to arm and disarm without opening it;
 middle-click shows the bar for the current selection. A keybind opens it too:
 `omarchy-shell blip-panel toggle`.

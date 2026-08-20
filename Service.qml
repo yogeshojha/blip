@@ -130,6 +130,126 @@ Item {
   readonly property var modules: Actions.groupCatalog(catalog)
   readonly property bool suppressed: sharing && pauseWhenSharing
 
+  // ---------------------------------------------------------------- packs
+  // A pack is a git repository under ~/.config/omarchy/blip/packs/. The scan
+  // reports the directories; the catalog supplies each one's action count.
+
+  property var installedPacks: []
+  property bool packBusy: false
+  property string packStatus: ""
+  property bool packStatusUrgent: false
+
+  readonly property var packList: {
+    var out = []
+    for (var i = 0; i < installedPacks.length; i++) {
+      var pack = installedPacks[i]
+      var marker = "/packs/" + pack.name + "/"
+      var count = 0
+      for (var j = 0; j < catalog.length; j++) {
+        if (catalog[j].origin === "pack" && String(catalog[j].source).indexOf(marker) !== -1) count++
+      }
+      out.push({ name: pack.name, path: pack.path, actions: count })
+    }
+    return out
+  }
+
+  function hasPack(name) {
+    for (var i = 0; i < installedPacks.length; i++) {
+      if (installedPacks[i].name === name) return true
+    }
+    return false
+  }
+
+  function packAdd(source) {
+    var src = String(source || "").replace(/^\s+|\s+$/g, "")
+    if (packBusy) return "error: another pack operation is running"
+    if (!Actions.isPackSource(src)) return "error: packs install from an https:// git url or an absolute local path"
+    var name = Actions.packNameFromSource(src)
+    if (!name) return "error: cannot derive a pack name from '" + src + "'"
+    if (hasPack(name)) return "error: pack '" + name + "' is already installed"
+    // Clone into a dot-prefixed staging directory the scanner's globs skip,
+    // then move into place in one step: the catalog never sees half a pack,
+    // and the on-disk existence check closes the window where a directory
+    // exists but the last scan has not reported it yet.
+    var dest = userDir + "/packs/" + name
+    var staging = userDir + "/packs/.staging-" + name
+    runPack("add", name, ["bash", "-c",
+      'set -e; [ ! -e "$2" ] || { echo "a pack named $(basename -- "$2") is already installed" >&2; exit 1; }; '
+      + 'rm -rf -- "$1"; git clone --depth 1 -- "$0" "$1"; mv -T -- "$1" "$2"',
+      src, staging, dest])
+    return "installing " + name
+  }
+
+  function packUpdate(name) {
+    var key = String(name || "").replace(/^\s+|\s+$/g, "")
+    if (packBusy) return "error: another pack operation is running"
+    if (!Actions.isPackName(key) || !hasPack(key)) return "error: no pack named '" + key + "'"
+    runPack("update", key, ["git", "-C", userDir + "/packs/" + key, "pull", "--ff-only"])
+    return "updating " + key
+  }
+
+  function packRemove(name) {
+    var key = String(name || "").replace(/^\s+|\s+$/g, "")
+    if (packBusy) return "error: another pack operation is running"
+    if (!Actions.isPackName(key) || !hasPack(key)) return "error: no pack named '" + key + "'"
+    runPack("remove", key, ["rm", "-rf", "--", userDir + "/packs/" + key])
+    return "removing " + key
+  }
+
+  function runPack(op, name, argv) {
+    packBusy = true
+    packStatusUrgent = false
+    packStatus = (op === "add" ? "Installing " : op === "update" ? "Updating " : "Removing ") + name + "…"
+    packStatusClear.stop()
+    packProc.op = op
+    packProc.packName = name
+    packProc.timedOut = false
+    packProc.command = argv
+    packProc.running = true
+  }
+
+  Process {
+    id: packProc
+
+    property string op: ""
+    property string packName: ""
+    property bool timedOut: false
+
+    stderr: StdioCollector { id: packErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      service.packBusy = false
+      if (timedOut) {
+        service.packStatus = packName + ": gave up after 2 minutes"
+        service.packStatusUrgent = true
+      } else if (exitCode === 0) {
+        service.packStatus = (op === "add" ? "Installed " : op === "update" ? "Updated " : "Removed ") + packName
+        service.packStatusUrgent = false
+      } else {
+        var lines = String(packErr.text || "").replace(/\s+$/, "").split("\n")
+        service.packStatus = packName + ": " + (lines[lines.length - 1] || "failed")
+        service.packStatusUrgent = true
+      }
+      service.rescan()
+      packStatusClear.restart()
+    }
+  }
+
+  // A clone against a dead network would otherwise hold packBusy forever.
+  Timer {
+    running: packProc.running
+    interval: 120000
+    onTriggered: {
+      packProc.timedOut = true
+      packProc.running = false
+    }
+  }
+
+  Timer {
+    id: packStatusClear
+    interval: 8000
+    onTriggered: service.packStatus = ""
+  }
+
   function setArmed(value) {
     if (!value) {
       popup.close()
@@ -289,23 +409,35 @@ Item {
     var loaded = Actions.loadCatalog(raw)
     fileEntries = loaded.entries
     catalogErrors = loaded.errors
+    installedPacks = loaded.packs
     for (var i = 0; i < loaded.errors.length; i++) console.warn("blip: " + loaded.errors[i])
   }
 
+  // A request that lands mid-scan is queued, not dropped: the running scan
+  // may have started before the change it would need to see.
+  property bool rescanQueued: false
+
   function rescan() {
-    if (scan.running) return
+    if (scan.running) {
+      rescanQueued = true
+      return
+    }
     scan.command = ["bash", "-c", scanScript, service.pluginDir, service.userDir]
     scan.running = true
   }
 
+  // Every marker carries a random per-run token, so a file's own contents
+  // can never forge one and smuggle actions in under a different origin.
   readonly property string scanScript: ""
     + "shopt -s nullglob; "
-    + "emit() { printf '===%s::%s===\\n' \"$1\" \"$2\"; cat -- \"$2\"; printf '\\n=== EOF ===\\n'; }; "
+    + "t=$(od -An -N8 -tx1 /dev/urandom | tr -d ' \\n'); "
+    + "printf '===blip-scan::%s===\\n' \"$t\"; "
+    + "emit() { printf '===%s@%s::%s===\\n' \"$t\" \"$1\" \"$2\"; cat -- \"$2\"; printf '\\n===%s@EOF===\\n' \"$t\"; }; "
     + "scan() { local origin=$1 dir=$2; [[ -d $dir ]] || return 0; "
     + "  for file in \"$dir\"/*.jsonc \"$dir\"/*.json; do [[ -f $file ]] && emit \"$origin\" \"$file\"; done; }; "
     + "mkdir -p \"$1/actions\" \"$1/packs\"; "
     + "scan builtin \"$0/actions\"; "
-    + "for pack in \"$1\"/packs/*/; do scan pack \"$pack/actions\"; done; "
+    + "for pack in \"$1\"/packs/*/; do printf '===%s@packdir::%s===\\n' \"$t\" \"$pack\"; scan pack \"$pack/actions\"; done; "
     + "scan user \"$1/actions\""
 
   Process {
@@ -315,7 +447,13 @@ Item {
       waitForEnd: true
       onStreamFinished: service.loadCatalog(text)
     }
-    onExited: catalogWatcher.running = true
+    onExited: {
+      catalogWatcher.running = true
+      if (service.rescanQueued) {
+        service.rescanQueued = false
+        service.rescan()
+      }
+    }
   }
 
   Process {
@@ -452,6 +590,7 @@ Item {
         open: popup.opened,
         actions: service.catalog.length,
         active: service.activeCatalog.length,
+        packs: service.packList.length,
         errors: service.catalogErrors
       })
     }
@@ -532,6 +671,12 @@ Item {
 
     function reload(): string { service.rescan(); return "ok" }
     function forget(): string { service.forgetConsent(); return "ok" }
+
+    // Packs: the same operations the panel's PACKS section runs.
+    function packs(): string { return JSON.stringify(service.packList, null, 2) }
+    function packAdd(source: string): string { return service.packAdd(source) }
+    function packUpdate(name: string): string { return service.packUpdate(name) }
+    function packRemove(name: string): string { return service.packRemove(name) }
 
     function detect(text: string): string {
       var detection = Detect.detect(text)

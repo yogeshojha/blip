@@ -174,29 +174,74 @@ function mergeCatalog(entries) {
 function parseScan(text) {
   var lines = String(text || "").split("\n")
   var files = []
+  var packs = []
   var current = null
-  for (var i = 0; i < lines.length; i++) {
-    var header = lines[i].match(/^===([a-z]+)::(.+)===$/)
-    if (header) {
-      current = { origin: header[1], source: header[2], body: [] }
-      continue
+
+  var token = ""
+  var start = 0
+  var opener = (lines[0] || "").match(/^===blip-scan::([0-9a-f]+)===$/)
+  if (opener) {
+    token = opener[1]
+    start = 1
+  }
+  var markerPrefix = "===" + token + "@"
+
+  for (var i = start; i < lines.length; i++) {
+    var line = lines[i]
+    var origin = null
+    var source = null
+    var eof = false
+
+    if (token) {
+      if (line.indexOf(markerPrefix) === 0 && line.slice(-3) === "===") {
+        var inner = line.slice(markerPrefix.length, -3)
+        if (inner === "EOF") {
+          eof = true
+        } else {
+          var sep = inner.indexOf("::")
+          if (sep > 0) {
+            origin = inner.slice(0, sep)
+            source = inner.slice(sep + 2)
+          }
+        }
+      }
+    } else {
+      var header = line.match(/^===([a-z]+)::(.+)===$/)
+      if (header) {
+        origin = header[1]
+        source = header[2]
+      } else if (line === "=== EOF ===") {
+        eof = true
+      }
     }
-    if (lines[i] === "=== EOF ===") {
+
+    if (eof) {
       if (current) files.push(current)
       current = null
       continue
     }
-    if (current) current.body.push(lines[i])
+    if (origin) {
+      // A packdir marker is a bare header with no body
+      if (origin === "packdir") {
+        var path = source.replace(/\/+$/, "")
+        packs.push({ name: path.slice(path.lastIndexOf("/") + 1), path: path })
+        current = null
+      } else {
+        current = { origin: origin, source: source, body: [] }
+      }
+      continue
+    }
+    if (current) current.body.push(line)
   }
-  return files
+  return { files: files, packs: packs }
 }
 
 function loadCatalog(scanText) {
-  var files = parseScan(scanText)
+  var scanned = parseScan(scanText)
   var entries = []
   var errors = []
-  for (var i = 0; i < files.length; i++) {
-    var file = files[i]
+  for (var i = 0; i < scanned.files.length; i++) {
+    var file = scanned.files[i]
     var origin = ORIGIN_RANK[file.origin] === undefined ? "user" : file.origin
     var parsed
     try {
@@ -212,7 +257,32 @@ function loadCatalog(scanText) {
       else entries.push(result.action)
     }
   }
-  return { entries: entries, errors: errors }
+  return { entries: entries, errors: errors, packs: scanned.packs }
+}
+
+// ------------------------------------------------------------------ packs
+// A pack is a git repository cloned under ~/.config/omarchy/blip/packs/.
+
+function isPackSource(url) {
+  var s = trim(url)
+  if (/^https:\/\/\S+$/.test(s)) return true
+  if (/^\/\S+$/.test(s)) return true // a local directory, for developing packs
+  return false
+}
+
+function isPackName(name) {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(name || ""))
+}
+
+// "https://github.com/you/Blip-Pack-DevTools.git" -> "devtools".
+// Lowercase before stripping, or a cased prefix survives and the same repo
+// installs under two names depending on how the URL was typed.
+function packNameFromSource(url) {
+  var base = trim(url).replace(/\/+$/, "").replace(/\.git$/i, "")
+  base = base.slice(base.lastIndexOf("/") + 1).toLowerCase()
+  base = base.replace(/^blip-pack-/, "").replace(/^blip-/, "")
+  base = base.replace(/[^a-z0-9._-]+/g, "-").replace(/^[-._]+|[-._]+$/g, "")
+  return isPackName(base) ? base : ""
 }
 
 var MODULE_TITLES = { core: "Core", text: "Text tools" }
