@@ -32,7 +32,7 @@
       "trigger": "Automatic",
       "grabKeyboard": false,
       "position": "At the cursor",
-      "minLength": 2,
+      "minLength": 5,
       "maxLength": 20000,
       "maxActions": 6,
       "debounceMs": 150,
@@ -40,6 +40,8 @@
       "pauseWhenSharing": true,
       "blockedApps": "1Password,KeePassXC,Bitwarden,Proton Pass",
       "showIndicator": true,
+      "searchEngine": "DuckDuckGo",
+      "searchUrl": "",
       "dwellSeconds": 4,
       "disabledActions": ""
     },
@@ -70,6 +72,27 @@
         "description": "Off means the bar answers Escape and its action letters without taking focus, so everything else you type still reaches the window you selected in. On means it takes the keyboard outright, adding arrows and Tab."
       },
       {
+        "key": "searchEngine",
+        "type": "enum",
+        "label": "Search with",
+        "options": [
+          "DuckDuckGo",
+          "Google",
+          "Brave",
+          "Kagi",
+          "Custom"
+        ],
+        "defaultValue": "DuckDuckGo",
+        "description": "Which engine the Search action opens. Custom uses the url below."
+      },
+      {
+        "key": "searchUrl",
+        "type": "string",
+        "label": "Custom search url",
+        "defaultValue": "",
+        "description": "Where Custom sends the selection. Put %s where the selection goes, as in https://github.com/search?q=%s&type=code. Blip's own ${enc} works too, alongside ${text} and ${type}."
+      },
+      {
         "key": "position",
         "type": "enum",
         "label": "Where it appears",
@@ -97,7 +120,7 @@
         "min": 1,
         "max": 200,
         "step": 1,
-        "defaultValue": 2,
+        "defaultValue": 5,
         "description": "Selections shorter than this are ignored, so a stray double-click does not show the bar."
       },
       {

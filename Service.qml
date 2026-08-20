@@ -62,6 +62,34 @@ Item {
   readonly property bool allowNetwork: setting("allowNetwork") === true
   readonly property bool pauseWhenSharing: setting("pauseWhenSharing") !== false
   readonly property bool showIndicator: setting("showIndicator") !== false
+
+  readonly property var searchEngines: [
+    { name: "DuckDuckGo",  url: "https://duckduckgo.com/?q=${enc}" },
+    { name: "Google",      url: "https://www.google.com/search?q=${enc}" },
+    { name: "Brave",       url: "https://search.brave.com/search?q=${enc}" },
+    { name: "Kagi",        url: "https://kagi.com/search?q=${enc}" },
+    { name: "Custom",      url: "" }
+  ]
+
+  readonly property string searchEngine: String(setting("searchEngine") || "DuckDuckGo")
+  readonly property string customSearch: String(setting("searchUrl") || "")
+  readonly property bool customSearchValid: /%s|\$\{\w+\}/.test(customSearch)
+  readonly property string searchTemplate: {
+    if (searchEngine === "Custom") return customSearchValid ? customSearch : searchEngines[0].url
+    for (var i = 0; i < searchEngines.length; i++) {
+      if (searchEngines[i].name === searchEngine) return searchEngines[i].url
+    }
+    return searchEngines[0].url
+  }
+
+  function cycleSearchEngine(step) {
+    var index = 0
+    for (var i = 0; i < searchEngines.length; i++) {
+      if (searchEngines[i].name === searchEngine) { index = i; break }
+    }
+    var next = (index + step + searchEngines.length) % searchEngines.length
+    persist("searchEngine", searchEngines[next].name)
+  }
   readonly property int minLength: Math.max(1, Number(setting("minLength")) || 2)
   readonly property int maxLength: Math.max(200, Number(setting("maxLength")) || 20000)
   readonly property int maxActions: Math.max(1, Number(setting("maxActions")) || 6)
@@ -322,6 +350,7 @@ Item {
     var detection = Detect.detect(request.text)
     detection.primaryLabel = Detect.label(detection.primary)
     detection.home = home
+    detection.searchTemplate = searchTemplate
 
     var menu = Actions.build(activeCatalog, detection, {
       app: lastApp,
@@ -727,6 +756,7 @@ Item {
         keyboard: popup.keyboardActive,
         bound: passiveKeys.bound.length,
         cursor: [popup.cursorX, popup.cursorY],
+        search: service.searchTemplate,
         actions: service.catalog.length,
         active: service.activeCatalog.length,
         packs: service.packList.length,

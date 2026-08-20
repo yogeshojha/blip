@@ -444,10 +444,19 @@ function expandHome(value, home) {
   return value
 }
 
+function searchFrom(template, vars) {
+  var url = String(template || "")
+  if (!url.length) return ""
+  return url.replace(/%s/g, "${enc}").replace(/\$\{(\w+)\}/g, function(match, name) {
+    if (name === "search" || vars[name] === undefined) return ""
+    return String(vars[name])
+  })
+}
+
 function variables(detection) {
   var path = detection.meta && detection.meta.path ? detection.meta.path : null
   var home = detection.home || ""
-  return {
+  var vars = {
     text: detection.text,
     value: detection.value,
     enc: percentEncode(detection.value),
@@ -458,6 +467,8 @@ function variables(detection) {
     line: path && path.line ? String(path.line) : "",
     type: detection.primary
   }
+  vars.search = searchFrom(detection.searchTemplate, vars)
+  return vars
 }
 
 function expand(template, detection) {

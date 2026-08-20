@@ -239,6 +239,27 @@ equal("tilde one level deep expands", Actions.expand("${path}", shallow), "/home
 equal("absolute path is untouched", Actions.expand("${path}", detection), "/etc/nginx/nginx.conf")
 equal("tilde is left alone with no home", Actions.expand("${path}", Detect.detect("~/.config/blip")), "~/.config/blip")
 
+const query = Detect.detect("rust async trait & more")
+function searched(template) {
+  query.searchTemplate = template
+  return Actions.expand("${search}", query)
+}
+equal("search template encodes the selection",
+  searched("https://github.com/search?q=${enc}&type=code"),
+  "https://github.com/search?q=rust%20async%20trait%20%26%20more&type=code")
+equal("%s is an alias for ${enc}",
+  searched("https://duckduckgo.com/?q=%s"),
+  "https://duckduckgo.com/?q=rust%20async%20trait%20%26%20more")
+equal("search templates take other variables too",
+  searched("https://example.com/?q=${enc}&t=${type}"),
+  "https://example.com/?q=rust%20async%20trait%20%26%20more&t=text")
+equal("an empty search template yields nothing", searched(""), "")
+equal("a search template cannot recurse", searched("https://example.com/?q=${search}"),
+  "https://example.com/?q=")
+equal("unknown placeholders drop out of a search template",
+  searched("https://example.com/?q=%s&x=${nope}"),
+  "https://example.com/?q=rust%20async%20trait%20%26%20more&x=")
+
 const remote = catalog.filter(function(action) { return action.id === "u.remote" })[0]
 equal("host is read out of the command", Actions.hostOf(remote, Detect.detect("x")), "api.example.com")
 
@@ -413,7 +434,12 @@ equal("JSON offers Format first", jsonMenu.all[0].id, "blip.json.format")
 const pathMenu = Actions.build(shippedCatalog, Detect.detect("/etc/hosts"), { limit: 6 })
 equal("a path offers Open first", pathMenu.all[0].id, "blip.path.open")
 const proseMenu = Actions.build(shippedCatalog, Detect.detect("some ordinary prose"), { limit: 6 })
-equal("prose starts with Copy", proseMenu.all[0].id, "blip.copy")
+equal("prose starts with Search", proseMenu.all[0].id, "blip.search")
+equal("then GitHub", proseMenu.all[1].id, "blip.search.github")
+const proseIds = proseMenu.all.map(function(a) { return a.id })
+check("Copy sorts under Ask agent",
+  proseIds.indexOf("blip.copy") > proseIds.indexOf("blip.agent"),
+  proseIds.join(" "))
 
 const declaredNetwork = ["blip.ip.whois"]
 

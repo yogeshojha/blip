@@ -6,9 +6,9 @@ terminal, a browser, an editor, a chat window.
 
 ![Blip over a JWT in a terminal](preview.png)
 
-A URL gets Open, QR, Copy. A JWT gets Decode with the expiry flagged. Minified
-JSON gets Format. A file path gets Open, Edit, Reveal, Terminal here. Anything
-at all gets Copy and Search.
+A URL gets Open and QR. A JWT gets Decode with the expiry flagged. Minified JSON
+gets Format. A file path gets Open, Edit, Reveal, Terminal here. Anything at all
+gets Search, GitHub and Ask agent, with Copy behind them.
 
 Some selections are answered on the bar itself, before you press anything. A
 Unix timestamp shows its local time, `23*4+18` shows `= 110`, `#1e88e5` shows
@@ -41,12 +41,17 @@ pointer well away and it closes; leave it alone and it fades after a few seconds
 
 | Key | |
 |---|---|
-| any letter | run the action with that letter |
+| a letter on a chip | run that action |
 | `←` `→` | move |
+| `↑` `↓` | dismiss, and reach your window |
 | `Enter` | run |
 | `=` | copy the instant answer, when there is one |
 | `Tab` | show everything, including the overflow |
 | `Esc` | back out one level, then close |
+
+Only the letters printed on the chips are taken. Every other key dismisses the
+bar and lands in the window you selected in, so `↑` still reaches your shell
+history and typing carries on where it was going.
 
 ![Every action for a plain sentence](screenshots/all-actions.png)
 
@@ -57,7 +62,7 @@ and `Esc` closes.
 
 | Selection | Actions |
 |---|---|
-| anything | Copy · Search · Ask agent · Run |
+| anything | Search · GitHub · Ask agent · Copy · Run |
 | url | Open · QR |
 | email | Mail · QR |
 | ip | Whois |
@@ -95,6 +100,24 @@ Drop a `.jsonc` in `~/.config/omarchy/blip/actions/`. No code, no restart.
 An action can also pipe the selection through a script, call another plugin
 over IPC, ship as a pack, or replace one of Blip's own. **[ACTIONS.md](ACTIONS.md)**
 is the full reference.
+
+## Search
+
+`Search` opens DuckDuckGo by default. The control panel cycles it through Google,
+Brave and Kagi, or takes a url of your own with `%s` where the selection goes:
+
+```
+https://lobste.rs/search?q=%s
+```
+
+Blip's own `${enc}` works there in place of `%s`, as do `${text}` and `${type}`,
+so a custom search can key off what was detected. A url with no placeholder at
+all is refused, and Search falls back to DuckDuckGo rather than searching for
+nothing.
+
+`GitHub` sits beside it on `g` and goes straight to GitHub code search, which
+wants you signed in. Both leave Copy further down the bar: `Ctrl+C` already
+exists, and in a terminal Copy is still there for the `Ctrl+Shift+C` case.
 
 ## Control panel
 

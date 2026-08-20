@@ -62,6 +62,8 @@ Panel {
     var rows = [{ kind: "hero", id: "hero" }]
     for (var i = 0; i < quickToggles.length; i++)
       rows.push({ kind: "toggle", id: quickToggles[i].key, spec: quickToggles[i] })
+    rows.push({ kind: "choice", id: "searchEngine" })
+    if (blip && blip.searchEngine === "Custom") rows.push({ kind: "searchurl", id: "searchurl" })
     for (var s = 0; s < sliderOrder.length; s++)
       rows.push({ kind: "slider", id: sliderOrder[s] })
     for (var m = 0; m < modules.length; m++) {
@@ -105,6 +107,8 @@ Panel {
     else if (row.kind === "toggle") flipToggle(row.id)
     else if (row.kind === "module") toggleModule(row.module)
     else if (row.kind === "action") blip.setActionEnabled(row.id, !blip.isActionEnabled(row.id))
+    else if (row.kind === "choice") blip.cycleSearchEngine(1)
+    else if (row.kind === "searchurl") searchField.forceActiveFocus()
     else if (row.kind === "packinstall") installField.forceActiveFocus()
     else if (row.kind === "pack") notePackResult(blip.packUpdate(row.id))
     else if (row.kind === "button" && row.id === "reload") blip.rescan()
@@ -127,7 +131,9 @@ Panel {
 
   function adjustCursor(dx) {
     var row = cursorRow
-    if (!row || !blip || row.kind !== "slider") return
+    if (!row || !blip) return
+    if (row.kind === "choice") { blip.cycleSearchEngine(dx); return }
+    if (row.kind !== "slider") return
     var spec = sliderSpecs[row.id]
     var value = sliderValue(row.id)
     blip.persist(row.id, Math.max(spec.min, Math.min(spec.max, value + dx * spec.step)))
@@ -387,6 +393,17 @@ Panel {
           PanelSeparator { foreground: root.foreground }
 
           PanelSectionHeader {
+            text: "SEARCH"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+          }
+
+          SettingChoiceRow { width: parent.width }
+          SearchUrlRow { width: parent.width }
+
+          PanelSeparator { foreground: root.foreground }
+
+          PanelSectionHeader {
             text: "TUNING"
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -642,6 +659,123 @@ Panel {
         cursorRing: false
         trackHeight: Style.space(18)
         foreground: root.foreground
+      }
+    }
+  }
+
+  component SettingChoiceRow: CursorSurface {
+    id: choiceRow
+
+    readonly property string engine: root.blip ? root.blip.searchEngine : ""
+
+    hasCursor: root.cursorId === "choice:searchEngine"
+    foreground: root.foreground
+    implicitHeight: choiceContent.implicitHeight + Style.space(12)
+
+    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(choiceRow)
+
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onEntered: root.setCursorTo("choice", "searchEngine")
+      onClicked: if (root.blip) root.blip.cycleSearchEngine(1)
+    }
+
+    Row {
+      id: choiceContent
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(10)
+      spacing: Style.space(8)
+
+      Column {
+        width: parent.width - choiceValue.width - parent.spacing
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(1)
+
+        Text {
+          width: parent.width
+          text: "Search with"
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          elide: Text.ElideRight
+        }
+
+        Text {
+          width: parent.width
+          text: "Where the Search action sends the selection. Click to cycle."
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          elide: Text.ElideRight
+        }
+      }
+
+      Text {
+        id: choiceValue
+        anchors.verticalCenter: parent.verticalCenter
+        text: choiceRow.engine
+        color: root.foreground
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+      }
+    }
+  }
+
+  component SearchUrlRow: CursorSurface {
+    id: urlRow
+
+    readonly property bool custom: root.blip && root.blip.searchEngine === "Custom"
+    readonly property bool valid: root.blip ? root.blip.customSearchValid : false
+
+    visible: custom
+    hasCursor: root.cursorId === "searchurl:searchurl"
+    foreground: root.foreground
+    implicitHeight: custom ? urlContent.implicitHeight + Style.space(12) : 0
+
+    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(urlRow)
+
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      acceptedButtons: Qt.NoButton
+      onEntered: root.setCursorTo("searchurl", "searchurl")
+    }
+
+    Column {
+      id: urlContent
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(10)
+      spacing: Style.space(4)
+
+      TextField {
+        id: searchField
+        width: parent.width
+        placeholderText: "https://github.com/search?q=%s&type=code"
+        text: root.blip ? root.blip.customSearch : ""
+        foreground: root.foreground
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        onAccepted: if (root.blip) root.blip.persist("searchUrl", text)
+        Keys.onEscapePressed: keyCatcher.forceActiveFocus()
+      }
+
+      Text {
+        width: parent.width
+        text: urlRow.valid
+          ? "Enter to save."
+          : "Put %s where the selection goes, then press Enter. Until then, DuckDuckGo."
+        color: urlRow.valid ? root.dim : root.urgent
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        wrapMode: Text.WordWrap
       }
     }
   }

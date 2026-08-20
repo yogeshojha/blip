@@ -156,9 +156,26 @@ Exactly one of these:
 | `builtin` | one of Blip's own transforms, listed by `omarchy-shell blip actions` |
 
 `${text}` `${value}` `${enc}` `${url}` `${path}` `${dir}` `${base}` `${line}`
-`${type}` expand inside `exec` argv, per argument, never through a shell. They
-do land in the process table for as long as the command runs, so prefer
-`script` for anything you would rather not have visible there.
+`${type}` `${search}` expand inside `exec` argv, per argument, never through a
+shell. They do land in the process table for as long as the command runs, so
+prefer `script` for anything you would rather not have visible there.
+
+`${path}` and `${dir}` come back absolute, with a leading `~` already expanded,
+since argv never reaches a shell that would do it.
+
+`${search}` is the search engine chosen in the control panel, with the selection
+already in it. It backs `blip.search` only. `blip.search.github` carries its own
+url, so override that id if you want repos or issues rather than code. Picking Custom there takes a url of your own, where `%s` marks the
+spot the selection goes:
+
+```
+https://github.com/search?q=%s&type=code
+```
+
+`${enc}` works there in place of `%s`, as do the other variables above, so a
+custom search can key off `${type}` or send `${base}` rather than the whole
+selection. A url with no placeholder at all is refused and Blip falls back to
+DuckDuckGo, rather than searching for nothing.
 
 ## Results
 

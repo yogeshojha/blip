@@ -18,6 +18,8 @@ LINKS AND ADDRESSES
 
 A url gets Open and QR. An email gets Mail and QR. An ip gets Whois, which stays
 hidden until network actions are allowed and asks for consent the first time.
+Search follows the engine picked in the control panel; GitHub always goes to
+GitHub code search.
 
 https://example.com/docs/getting-started?ref=blip#install
 hello@example.com
@@ -83,8 +85,10 @@ live swatch, a measurement shows its conversion. Press "=" to copy the answer.
 PLAIN TEXT AND CODE
 -------------------
 
-Anything at all gets Copy, Search, Ask agent and Run, plus the text transforms
-under Tab: Count, UPPER, lower, Title, To base64, Percent-encode.
+Anything at all gets Search, GitHub and Ask agent, with Copy and Run behind
+them and the text transforms under Tab: Count, UPPER, lower, Title, To base64,
+Percent-encode. How many of those reach the bar depends on the actions-on-the-bar
+setting, so a low one leaves the rest under Tab.
 
 serendipity
 The quick brown fox jumps over the lazy dog.

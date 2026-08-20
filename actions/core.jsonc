@@ -5,7 +5,7 @@
     "label": "Copy",
     "icon": "󰆏",
     "key": "c",
-    "priority": 20,
+    "priority": -5,
     "when": { "types": ["*"] },
     "run": { "builtin": "copy" },
     "output": "copy"
@@ -13,12 +13,22 @@
   {
     "id": "blip.search",
     "label": "Search",
-    "icon": "󰍉",
+    "icon": "󰖟",
     "key": "s",
     "priority": 10,
-    "description": "Opens your browser. Blip sends nothing itself.",
+    "description": "Opens your browser on the engine set in the panel. Blip sends nothing itself.",
     "when": { "types": ["*"], "maxLength": 400 },
-    "run": { "exec": ["xdg-open", "https://duckduckgo.com/?q=${enc}"] }
+    "run": { "exec": ["xdg-open", "${search}"] }
+  },
+  {
+    "id": "blip.search.github",
+    "label": "GitHub",
+    "icon": "󰊤",
+    "key": "g",
+    "priority": 9,
+    "description": "Searches GitHub code. Blip sends nothing itself.",
+    "when": { "types": ["*"], "maxLength": 400 },
+    "run": { "exec": ["xdg-open", "https://github.com/search?q=${enc}&type=code"] }
   },
   {
     "id": "blip.agent",
