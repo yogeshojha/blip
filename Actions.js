@@ -275,8 +275,7 @@ function isPackName(name) {
 }
 
 // "https://github.com/you/Blip-Pack-DevTools.git" -> "devtools".
-// Lowercase before stripping, or a cased prefix survives and the same repo
-// installs under two names depending on how the URL was typed.
+// Lowercase before stripping, or a cased prefix survives.
 function packNameFromSource(url) {
   var base = trim(url).replace(/\/+$/, "").replace(/\.git$/i, "")
   base = base.slice(base.lastIndexOf("/") + 1).toLowerCase()

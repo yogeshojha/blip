@@ -10,6 +10,9 @@ Item {
   property bool showKey: false
   property string overflowGlyph: ""
 
+  // Off when a shared gliding highlight paints the selection instead.
+  property bool paintSelection: true
+
   signal clicked()
   signal hovered()
 
@@ -24,8 +27,6 @@ Item {
   implicitWidth: body.implicitWidth + Style.spacing.controlPaddingX * 2
   implicitHeight: Math.max(Style.space(28), Style.font.body + Style.spacing.controlPaddingY * 2)
 
-  Behavior on implicitWidth { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-
   Item {
     id: inner
     anchors.fill: parent
@@ -37,8 +38,8 @@ Item {
     BorderSurface {
       anchors.fill: parent
       radius: Style.cornerRadius
-      color: root.selected ? Style.selectedFillFor(root.ink, Color.accent) : "transparent"
-      borderSpec: root.selected
+      color: root.selected && root.paintSelection ? Style.selectedFillFor(root.ink, Color.accent) : "transparent"
+      borderSpec: root.selected && root.paintSelection
         ? Border.controlSpec("selected", root.ink, Color.accent)
         : Border.none()
 

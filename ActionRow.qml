@@ -9,6 +9,9 @@ Item {
   property bool selected: false
   property bool showKey: false
 
+  // Off when a shared gliding highlight paints the selection instead.
+  property bool paintSelection: true
+
   signal clicked()
   signal hovered()
 
@@ -21,7 +24,7 @@ Item {
 
   CursorSurface {
     anchors.fill: parent
-    hasCursor: root.selected
+    hasCursor: root.selected && root.paintSelection
     foreground: root.ink
   }
 

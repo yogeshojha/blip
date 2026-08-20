@@ -333,13 +333,13 @@ Item {
       transformOrigin: Item.Center
 
       transform: Translate {
-        y: root.opened ? 0 : Style.space(6)
+        y: root.opened ? 0 : (root.placeAbove ? Style.space(6) : -Style.space(6))
 
-        Behavior on y { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+        Behavior on y { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
       }
 
       Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-      Behavior on scale { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.4 } }
 
       // Only the size animates: x and y derive from it and track in sync.
       Behavior on width { enabled: root.morphEnabled; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
@@ -484,11 +484,41 @@ Item {
   Component {
     id: chipRow
 
-    Row {
-      spacing: root.gap
+    Item {
+      id: chipStrip
+      implicitWidth: strip.implicitWidth
+      implicitHeight: strip.implicitHeight
 
-      Rectangle {
-        id: badge
+      readonly property Item selChip: {
+        var deps = root.index + chipRepeater.count
+        return chipRepeater.itemAt(root.index)
+      }
+
+      // The one selection surface; entrance opacity and scale follow the chip.
+      BorderSurface {
+        id: glide
+        visible: chipStrip.selChip !== null
+        x: chipStrip.selChip ? chipStrip.selChip.x : 0
+        y: chipStrip.selChip ? chipStrip.selChip.y : 0
+        width: chipStrip.selChip ? chipStrip.selChip.width : 0
+        height: chipStrip.selChip ? chipStrip.selChip.height : 0
+        opacity: chipStrip.selChip ? chipStrip.selChip.opacity : 0
+        scale: chipStrip.selChip ? chipStrip.selChip.scale : 1
+        transformOrigin: Item.Center
+        radius: Style.cornerRadius
+        color: Style.selectedFillFor(root.ink, Color.accent)
+        borderSpec: Border.controlSpec("selected", root.ink, Color.accent)
+
+        Behavior on x { enabled: root.morphEnabled; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on width { enabled: root.morphEnabled; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+      }
+
+      Row {
+        id: strip
+        spacing: root.gap
+
+        Rectangle {
+          id: badge
         visible: root.typeLabel !== ""
         width: badgeContent.implicitWidth + Style.spacing.md * 2
         height: root.chipHeight
@@ -566,12 +596,14 @@ Item {
       }
 
       Repeater {
+        id: chipRepeater
         model: root.visibleActions
 
         Chip {
           id: chip
           action: modelData
           selected: root.index === index
+          paintSelection: false
           showKey: root.keyboardActive
           onClicked: { root.index = index; root.activate() }
           onHovered: root.index = index
@@ -612,6 +644,7 @@ Item {
           }
         }
       }
+      }
     }
   }
 
@@ -619,8 +652,14 @@ Item {
     id: actionList
 
     Item {
+      id: listBox
       implicitWidth: Math.min(Math.max(root.listWidth, root.listWidthFloor), root.maxBodyWidth)
       implicitHeight: Math.min(listColumn.implicitHeight, root.maxListHeight)
+
+      readonly property Item selRow: {
+        var deps = root.index + rowRepeater.count
+        return rowRepeater.itemAt(root.index)
+      }
 
       Flickable {
         id: listFlick
@@ -631,18 +670,34 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentHeight > height
 
+        CursorSurface {
+          id: listGlide
+          visible: listBox.selRow !== null
+          x: 0
+          width: listColumn.width
+          y: listBox.selRow ? listBox.selRow.y : 0
+          height: listBox.selRow ? listBox.selRow.height : 0
+          hasCursor: true
+          foreground: root.ink
+
+          Behavior on y { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+          Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+        }
+
         Column {
           id: listColumn
           width: listFlick.width
           spacing: Style.spacing.xxs
 
           Repeater {
+            id: rowRepeater
             model: root.rows
 
             ActionRow {
               width: listColumn.width
               action: modelData
               selected: root.index === index
+              paintSelection: false
               showKey: root.keyboardActive
               onClicked: { root.index = index; root.activate() }
               onHovered: root.index = index
@@ -782,6 +837,14 @@ Item {
       radius: Style.cornerRadius > 0 ? Style.space(10) : 0
       color: "white"
 
+      opacity: 0
+      scale: 0.92
+      transformOrigin: Item.Center
+      Component.onCompleted: { opacity = 1; scale = 1 }
+
+      Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: 280; easing.type: Easing.OutBack; easing.overshoot: 1.6 } }
+
       Image {
         id: code
         anchors.centerIn: parent
@@ -800,6 +863,17 @@ Item {
     Item {
       implicitWidth: Math.min(Math.max(body.implicitWidth, Style.space(180)), root.maxBodyWidth)
       implicitHeight: Math.min(body.implicitHeight, root.maxBodyHeight)
+
+      opacity: 0
+      transform: Translate {
+        id: bodyRise
+        y: Style.space(5)
+
+        Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+      }
+      Component.onCompleted: { opacity = 1; bodyRise.y = 0 }
+
+      Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
 
       Flickable {
         anchors.fill: parent

@@ -131,8 +131,7 @@ Item {
   readonly property bool suppressed: sharing && pauseWhenSharing
 
   // ---------------------------------------------------------------- packs
-  // A pack is a git repository under ~/.config/omarchy/blip/packs/. The scan
-  // reports the directories; the catalog supplies each one's action count.
+  // A pack is a git repository under ~/.config/omarchy/blip/packs/.
 
   property var installedPacks: []
   property bool packBusy: false
@@ -167,10 +166,8 @@ Item {
     var name = Actions.packNameFromSource(src)
     if (!name) return "error: cannot derive a pack name from '" + src + "'"
     if (hasPack(name)) return "error: pack '" + name + "' is already installed"
-    // Clone into a dot-prefixed staging directory the scanner's globs skip,
-    // then move into place in one step: the catalog never sees half a pack,
-    // and the on-disk existence check closes the window where a directory
-    // exists but the last scan has not reported it yet.
+    // Staged in a dot-prefixed dir the scanner skips, moved into place in
+    // one step, so the catalog never sees half a pack.
     var dest = userDir + "/packs/" + name
     var staging = userDir + "/packs/.staging-" + name
     runPack("add", name, ["bash", "-c",
@@ -413,8 +410,7 @@ Item {
     for (var i = 0; i < loaded.errors.length; i++) console.warn("blip: " + loaded.errors[i])
   }
 
-  // A request that lands mid-scan is queued, not dropped: the running scan
-  // may have started before the change it would need to see.
+  // Queued, not dropped: the running scan may predate the change.
   property bool rescanQueued: false
 
   function rescan() {
@@ -426,8 +422,7 @@ Item {
     scan.running = true
   }
 
-  // Every marker carries a random per-run token, so a file's own contents
-  // can never forge one and smuggle actions in under a different origin.
+  // Markers carry a random per-run token so file contents cannot forge them.
   readonly property string scanScript: ""
     + "shopt -s nullglob; "
     + "t=$(od -An -N8 -tx1 /dev/urandom | tr -d ' \\n'); "

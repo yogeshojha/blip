@@ -231,6 +231,52 @@ equal("unknown placeholders are left alone", Actions.expand("${nope}", detection
 const remote = catalog.filter(function(action) { return action.id === "u.remote" })[0]
 equal("host is read out of the command", Actions.hostOf(remote, Detect.detect("x")), "api.example.com")
 
+// Packs
+
+const withPacks = Actions.loadCatalog([
+  "===packdir::/u/packs/devtools/===",
+  scan("pack", "/u/packs/devtools/actions/x.jsonc", '[{"id":"p.x","label":"X","run":{"builtin":"copy"}}]'),
+  "===packdir::/u/packs/empty/===",
+  scan("user", "/u/actions/mine.jsonc", '[{"id":"m.y","label":"Y","run":{"builtin":"copy"}}]')
+].join("\n"))
+equal("pack directories are reported", withPacks.packs.map(function(p) { return p.name }).join(","), "devtools,empty")
+equal("an empty pack still shows up", withPacks.packs[1].name, "empty")
+equal("packdir markers do not eat actions", withPacks.entries.length, 2)
+
+equal("pack name from a git url", Actions.packNameFromSource("https://github.com/you/blip-pack-devtools.git"), "devtools")
+equal("pack name from a plain repo", Actions.packNameFromSource("https://github.com/you/K8s-Tools"), "k8s-tools")
+equal("pack name from a local path", Actions.packNameFromSource("/home/me/src/blip-jira/"), "jira")
+equal("a cased prefix still strips", Actions.packNameFromSource("https://github.com/you/Blip-Pack-DevTools.git"), "devtools")
+equal("garbage yields no pack name", Actions.packNameFromSource("https://github.com/you/..."), "")
+
+// The runtime scan opens with a random boundary token; markers inside file
+// bodies must be treated as body text, not honoured.
+const bounded = Actions.loadCatalog([
+  "===blip-scan::deadbeef01234567===",
+  "===deadbeef01234567@builtin::/p/actions/a.jsonc===",
+  '[{"id":"b.real","label":"Real","run":{"builtin":"copy"}}]',
+  "===deadbeef01234567@EOF===",
+  "===deadbeef01234567@pack::/u/packs/evil/actions/x.jsonc===",
+  '[{"id":"p.decoy","label":"Decoy","run":{"builtin":"copy"}}]',
+  "=== EOF ===",
+  "===user::/u/actions/forged.jsonc===",
+  '[{"id":"p.forged","label":"Forged","run":{"builtin":"copy"}}]',
+  "===deadbeef01234567@EOF===",
+  "===deadbeef01234567@packdir::/u/packs/evil/===",
+].join("\n"))
+equal("boundary markers parse", bounded.entries.filter(function(a) { return a.id === "b.real" }).length, 1)
+equal("forged markers register nothing", bounded.entries.filter(function(a) { return a.id === "p.forged" || a.id === "p.decoy" }).length, 0)
+check("the poisoned file reports itself instead", bounded.errors.length === 1 && /evil\/actions\/x\.jsonc/.test(bounded.errors[0]), bounded.errors.join(" | "))
+equal("packdir markers carry the token too", bounded.packs.map(function(p) { return p.name }).join(","), "evil")
+
+check("https sources are accepted", Actions.isPackSource("https://github.com/you/pack.git"))
+check("local paths are accepted", Actions.isPackSource("/home/me/src/pack"))
+check("http is refused", !Actions.isPackSource("http://github.com/you/pack.git"))
+check("ssh urls are refused", !Actions.isPackSource("git@github.com:you/pack.git"))
+check("commands are not sources", !Actions.isPackSource("https://x.com/a; rm -rf ~"))
+check("pack names cannot traverse", !Actions.isPackName("../escape"))
+check("pack names cannot be nested", !Actions.isPackName("a/b"))
+
 const grouped = Actions.groupCatalog(Actions.mergeCatalog([].concat(
   Actions.loadCatalog(scan("builtin", "/plugin/actions/core.jsonc", '[{"id":"a","label":"A","run":{"builtin":"copy"}}]')).entries,
   Actions.loadCatalog(scan("builtin", "/plugin/actions/text.jsonc", '[{"id":"b","label":"B","run":{"builtin":"copy"}}]')).entries,

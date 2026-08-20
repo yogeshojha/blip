@@ -112,8 +112,7 @@ Panel {
     else if (row.kind === "button" && row.id === "forget") blip.forgetConsent()
   }
 
-  // Every pack operation reports through here, so a refused one (busy,
-  // bad url) surfaces in the panel instead of vanishing into a return value.
+  // Refused operations (busy, bad url) surface here instead of vanishing.
   function notePackResult(result) {
     installNote = String(result).indexOf("error:") === 0 ? String(result).slice(7).replace(/^\s+/, "") : ""
     return installNote === ""
@@ -198,6 +197,7 @@ Panel {
     cursorActive = false
     cursor = 0
     if (flick) flick.contentY = 0
+    panelIntro.restart()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -275,18 +275,39 @@ Panel {
         interactive: contentHeight > height
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
+        ParallelAnimation {
+          id: panelIntro
+
+          NumberAnimation {
+            target: column
+            property: "opacity"
+            from: 0
+            to: 1
+            duration: 180
+            easing.type: Easing.OutCubic
+          }
+          NumberAnimation {
+            target: columnRise
+            property: "y"
+            from: Style.space(8)
+            to: 0
+            duration: 240
+            easing.type: Easing.OutCubic
+          }
+        }
+
         Column {
           id: column
           width: flick.width
           spacing: Style.space(12)
+          transform: Translate { id: columnRise }
 
           Item {
             id: heroBlock
             width: parent.width
             implicitHeight: hero.implicitHeight
             readonly property bool ringVisible: root.cursorId === "hero:hero"
-            // The hero is not a CursorSurface, so it needs its own scroll
-            // hook or arriving here from below leaves the view stranded.
+            // Not a CursorSurface, so it needs its own scroll hook.
             onRingVisibleChanged: if (ringVisible) root.scrollItemIntoView(heroBlock)
             function focusHero() { root.setCursorTo("hero", "hero") }
 
@@ -479,8 +500,7 @@ Panel {
           Text {
             visible: text !== ""
             width: parent.width
-            // A running operation always narrates; a stale validation note
-            // must not mask it.
+            // A running operation outranks a stale validation note.
             text: root.blip && root.blip.packBusy ? root.blip.packStatus
               : (root.installNote !== "" ? root.installNote : (root.blip ? root.blip.packStatus : ""))
             color: (root.blip && root.blip.packBusy) ? root.dim
