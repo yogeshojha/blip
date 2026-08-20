@@ -1,0 +1,192 @@
+// Built-in actions. Same format as ~/.config/omarchy/blip/actions/.
+[
+  {
+    "id": "blip.copy",
+    "label": "Copy",
+    "icon": "󰆏",
+    "key": "c",
+    "priority": 20,
+    "when": { "types": ["*"] },
+    "run": { "builtin": "copy" },
+    "output": "copy"
+  },
+  {
+    "id": "blip.search",
+    "label": "Search",
+    "icon": "󰍉",
+    "key": "s",
+    "priority": 10,
+    "description": "Opens your browser. Blip sends nothing itself.",
+    "when": { "types": ["*"], "maxLength": 400 },
+    "run": { "exec": ["xdg-open", "https://duckduckgo.com/?q=${enc}"] }
+  },
+  {
+    "id": "blip.agent",
+    "label": "Ask agent",
+    "icon": "󰚩",
+    "key": "a",
+    "priority": -2,
+    "when": { "types": ["*"], "maxLength": 8000 },
+    "run": { "exec": ["omarchy-agent-prompt", "${text}"] }
+  },
+  {
+    "id": "blip.run",
+    "label": "Run",
+    "icon": "󰆍",
+    "key": "r",
+    "priority": -8,
+    "confirm": true,
+    "description": "Runs it as a shell command in a new terminal.",
+    "when": { "types": ["*"], "maxLength": 2000, "notTypes": ["multiline"] },
+    "run": { "exec": ["uwsm-app", "--", "xdg-terminal-exec", "-e", "bash", "-c", "${text}\nprintf '\\n'; read -n1 -rsp 'Press any key to close…'"] }
+  },
+
+  {
+    "id": "blip.url.open",
+    "label": "Open",
+    "icon": "󰏌",
+    "key": "o",
+    "priority": 40,
+    "when": { "types": ["url"] },
+    "run": { "exec": ["xdg-open", "${url}"] }
+  },
+  {
+    "id": "blip.url.qr",
+    "label": "QR",
+    "icon": "󰐲",
+    "key": "q",
+    "priority": 5,
+    "description": "Renders a scannable code in the popup.",
+    "when": { "types": ["url", "email"], "maxLength": 1200 },
+    "run": { "script": "qr.sh" },
+    "render": "qr",
+    "output": "show"
+  },
+  {
+    "id": "blip.email.compose",
+    "label": "Mail",
+    "icon": "󰇮",
+    "key": "m",
+    "priority": 30,
+    "when": { "types": ["email"] },
+    "run": { "exec": ["xdg-open", "mailto:${value}"] }
+  },
+  {
+    "id": "blip.ip.whois",
+    "label": "Whois",
+    "icon": "󰇧",
+    "key": "w",
+    "priority": 35,
+    "network": true,
+    "host": "ipinfo.io",
+    "description": "Looks the address up at ipinfo.io.",
+    "when": { "types": ["ip"] },
+    "run": { "script": "whois.sh" },
+    "output": "show"
+  },
+
+  {
+    "id": "blip.jwt.decode",
+    "label": "Decode",
+    "icon": "󰌆",
+    "key": "d",
+    "priority": 40,
+    "when": { "types": ["jwt"] },
+    "run": { "builtin": "jwt.decode" },
+    "output": "show"
+  },
+  {
+    "id": "blip.json.format",
+    "label": "Format",
+    "icon": "󰘦",
+    "key": "f",
+    "priority": 40,
+    "when": { "types": ["json"] },
+    "run": { "builtin": "json.format" },
+    "output": "show"
+  },
+  {
+    "id": "blip.json.minify",
+    "label": "Minify",
+    "icon": "󰘦",
+    "priority": -4,
+    "when": { "types": ["json"] },
+    "run": { "builtin": "json.minify" },
+    "output": "copy"
+  },
+  {
+    "id": "blip.base64.decode",
+    "label": "Decode",
+    "icon": "󰯄",
+    "key": "d",
+    "priority": 35,
+    "when": { "types": ["base64"] },
+    "run": { "builtin": "base64.decode" },
+    "output": "show"
+  },
+  {
+    "id": "blip.hex.decode",
+    "label": "Decode hex",
+    "icon": "󰯄",
+    "priority": 30,
+    "when": { "types": ["hex"], "notTypes": ["hash", "color"] },
+    "run": { "builtin": "hex.decode" },
+    "output": "show"
+  },
+  {
+    "id": "blip.urlencoded.decode",
+    "label": "Decode",
+    "icon": "󰯄",
+    "key": "d",
+    "priority": 35,
+    "when": { "types": ["urlencoded"] },
+    "run": { "builtin": "url.decode" },
+    "output": "show"
+  },
+  {
+    "id": "blip.epoch.local",
+    "label": "Local time",
+    "icon": "󰅐",
+    "key": "t",
+    "priority": 40,
+    "when": { "types": ["epoch"] },
+    "run": { "builtin": "epoch.local" },
+    "output": "show"
+  },
+
+  {
+    "id": "blip.path.open",
+    "label": "Open",
+    "icon": "󰈔",
+    "key": "o",
+    "priority": 40,
+    "when": { "types": ["path"] },
+    "run": { "exec": ["xdg-open", "${path}"] }
+  },
+  {
+    "id": "blip.path.edit",
+    "label": "Edit",
+    "icon": "󰏫",
+    "key": "e",
+    "priority": 35,
+    "when": { "types": ["path"] },
+    "run": { "exec": ["omarchy-launch-editor", "${path}"] }
+  },
+  {
+    "id": "blip.path.reveal",
+    "label": "Reveal",
+    "icon": "󰉋",
+    "key": "v",
+    "priority": 30,
+    "when": { "types": ["path"] },
+    "run": { "exec": ["xdg-open", "${dir}"] }
+  },
+  {
+    "id": "blip.path.terminal",
+    "label": "Terminal here",
+    "icon": "󰆍",
+    "priority": 25,
+    "when": { "types": ["path"] },
+    "run": { "exec": ["uwsm-app", "--", "xdg-terminal-exec", "--dir=${dir}"] }
+  }
+]

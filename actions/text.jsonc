@@ -1,0 +1,57 @@
+// Text utilities. Low priority on purpose: they live behind the overflow key.
+[
+  {
+    "id": "blip.count",
+    "label": "Count",
+    "icon": "󰆉",
+    "priority": -10,
+    "when": { "types": ["*"] },
+    "run": { "builtin": "count" },
+    "output": "show"
+  },
+  {
+    "id": "blip.case.upper",
+    "label": "UPPER",
+    "icon": "󰬴",
+    "priority": -12,
+    "when": { "types": ["*"], "maxLength": 8000 },
+    "run": { "builtin": "case.upper" },
+    "output": "copy"
+  },
+  {
+    "id": "blip.case.lower",
+    "label": "lower",
+    "icon": "󰬴",
+    "priority": -13,
+    "when": { "types": ["*"], "maxLength": 8000 },
+    "run": { "builtin": "case.lower" },
+    "output": "copy"
+  },
+  {
+    "id": "blip.case.title",
+    "label": "Title",
+    "icon": "󰬴",
+    "priority": -14,
+    "when": { "types": ["*"], "maxLength": 8000 },
+    "run": { "builtin": "case.title" },
+    "output": "copy"
+  },
+  {
+    "id": "blip.base64.encode",
+    "label": "To base64",
+    "icon": "󰯄",
+    "priority": -16,
+    "when": { "types": ["*"], "notTypes": ["base64", "jwt"], "maxLength": 8000 },
+    "run": { "builtin": "base64.encode" },
+    "output": "copy"
+  },
+  {
+    "id": "blip.url.encode",
+    "label": "Percent-encode",
+    "icon": "󰯄",
+    "priority": -17,
+    "when": { "types": ["*"], "notTypes": ["urlencoded"], "maxLength": 8000 },
+    "run": { "builtin": "url.encode" },
+    "output": "copy"
+  }
+]

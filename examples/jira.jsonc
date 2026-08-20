@@ -1,0 +1,17 @@
+// Copy to ~/.config/omarchy/blip/actions/ and edit the host.
+[
+  {
+    "id": "acme.jira",
+    "label": "Ticket",
+    "icon": "󰠮",
+    "when": { "matches": "^[A-Z]{2,10}-[0-9]+$" },
+    "run": { "exec": ["xdg-open", "https://jira.acme.com/browse/${text}"] }
+  },
+  {
+    "id": "acme.commit",
+    "label": "Commit",
+    "icon": "󰜘",
+    "when": { "matches": "^[0-9a-f]{7,40}$", "types": ["hex"] },
+    "run": { "exec": ["xdg-open", "https://github.com/acme/app/commit/${text}"] }
+  }
+]

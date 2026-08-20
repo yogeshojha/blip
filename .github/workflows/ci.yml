@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Detector, catalogue, transforms
+        run: node test/run.js
+
+  manifest:
+    name: manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Mirrors omarchy-plugin-validate, which is not available on a runner.
+      - name: Validate manifest.json
+        run: |
+          set -euo pipefail
+          jq -e '.schemaVersion == 1' manifest.json >/dev/null
+          for field in id name version kinds entryPoints; do
+            jq -e --arg f "$field" 'has($f)' manifest.json >/dev/null
+          done
+          jq -e '(.kinds | type) == "array" and (.kinds | length) > 0' manifest.json >/dev/null
+          jq -e '.id | test("^[A-Za-z0-9][A-Za-z0-9._-]*$") and (startswith("omarchy.") | not)' manifest.json >/dev/null
+
+          while IFS= read -r entry; do
+            [[ $entry != /* ]] || { echo "absolute entry point: $entry" >&2; exit 1; }
+            [[ $entry != *".."* ]] || { echo "traversal in entry point: $entry" >&2; exit 1; }
+            [[ -f $entry ]] || { echo "missing entry point: $entry" >&2; exit 1; }
+          done < <(jq -r '.entryPoints[]' manifest.json)
+
+          for pair in bar:bar bar-widget:barWidget menu:menu overlay:overlay panel:panel service:service; do
+            kind=${pair%%:*}
+            key=${pair##*:}
+            jq -e --arg k "$kind" '(.kinds | index($k)) != null' manifest.json >/dev/null || continue
+            jq -e --arg k "$key" '.entryPoints | has($k)' manifest.json >/dev/null
+          done
+
+          link=$(find . -name .git -prune -o -type l -print -quit)
+          [[ -z $link ]] || { echo "symlink in plugin folder: $link" >&2; exit 1; }
+
+      - name: Settings schema covers every default
+        run: |
+          set -euo pipefail
+          jq -e '
+            (.barWidget.defaults | keys) as $defaults
+            | (.barWidget.schema | map(.key)) as $schema
+            | ($defaults - $schema) == [] and ($schema - $defaults) == []
+          ' manifest.json >/dev/null
+
+  shell:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: shellcheck scripts/*.sh

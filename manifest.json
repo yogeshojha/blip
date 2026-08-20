@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "id": "yogeshojha.blip",
+  "name": "Blip",
+  "version": "0.1.0",
+  "author": "Yogesh Ojha",
+  "license": "MIT",
+  "description": "Select text anywhere and Blip offers the actions that fit it. A selection-action layer for Omarchy.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Blip",
+    "description": "Select text anywhere and a themed bar appears with the actions that fit it. Click the icon for the control panel.",
+    "category": "Productivity",
+    "aliases": [
+      "blip",
+      "selection",
+      "popclip",
+      "actions"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "armed": true,
+      "trigger": "Automatic",
+      "grabKeyboard": false,
+      "position": "At the cursor",
+      "minLength": 2,
+      "maxLength": 20000,
+      "maxActions": 6,
+      "debounceMs": 150,
+      "allowNetwork": false,
+      "pauseWhenSharing": true,
+      "blockedApps": "1Password,KeePassXC,Bitwarden,Proton Pass",
+      "showIndicator": true,
+      "dwellSeconds": 4,
+      "disabledActions": ""
+    },
+    "schema": [
+      {
+        "key": "armed",
+        "type": "boolean",
+        "label": "Armed",
+        "defaultValue": true,
+        "description": "Off means Blip watches nothing. The switch in the Blip panel toggles the same setting."
+      },
+      {
+        "key": "trigger",
+        "type": "enum",
+        "label": "Show the bar",
+        "options": [
+          "Automatic",
+          "Keybind only"
+        ],
+        "defaultValue": "Automatic",
+        "description": "Automatic shows the bar as soon as you select something. Keybind only waits until you ask for it."
+      },
+      {
+        "key": "grabKeyboard",
+        "type": "boolean",
+        "label": "Take the keyboard right away",
+        "defaultValue": false,
+        "description": "Off means the bar appears without taking focus, and your keybind hands it the keyboard. On means arrows and letters work immediately."
+      },
+      {
+        "key": "position",
+        "type": "enum",
+        "label": "Where it appears",
+        "options": [
+          "At the cursor",
+          "Screen centre"
+        ],
+        "defaultValue": "At the cursor",
+        "description": "At the cursor puts the bar just above the pointer, flipping below it near the top of the screen."
+      },
+      {
+        "key": "dwellSeconds",
+        "type": "integer",
+        "label": "Fade after (seconds)",
+        "min": 1,
+        "max": 30,
+        "step": 1,
+        "defaultValue": 4,
+        "description": "How long the bar stays up before it fades. Hovering it or taking the keyboard holds it open."
+      },
+      {
+        "key": "minLength",
+        "type": "integer",
+        "label": "Shortest selection",
+        "min": 1,
+        "max": 200,
+        "step": 1,
+        "defaultValue": 2,
+        "description": "Selections shorter than this are ignored, so a stray double-click does not show the bar."
+      },
+      {
+        "key": "maxLength",
+        "type": "integer",
+        "label": "Longest selection",
+        "min": 200,
+        "max": 200000,
+        "step": 1000,
+        "defaultValue": 20000,
+        "description": "Selections longer than this are ignored."
+      },
+      {
+        "key": "maxActions",
+        "type": "integer",
+        "label": "Actions on the bar",
+        "min": 3,
+        "max": 12,
+        "step": 1,
+        "defaultValue": 6,
+        "description": "The rest go behind the overflow key."
+      },
+      {
+        "key": "debounceMs",
+        "type": "integer",
+        "label": "Settle time (ms)",
+        "min": 0,
+        "max": 2000,
+        "step": 25,
+        "defaultValue": 150,
+        "description": "How long a selection has to hold still before the bar appears."
+      },
+      {
+        "key": "allowNetwork",
+        "type": "boolean",
+        "label": "Allow actions that leave this machine",
+        "defaultValue": false,
+        "description": "Off hides every action marked network. On still asks before the first send, once per action."
+      },
+      {
+        "key": "pauseWhenSharing",
+        "type": "boolean",
+        "label": "Disarm while sharing the screen",
+        "defaultValue": true,
+        "description": "No bar appears over a screen share or a recording."
+      },
+      {
+        "key": "blockedApps",
+        "type": "string",
+        "label": "Never watch these apps",
+        "defaultValue": "1Password,KeePassXC,Bitwarden,Proton Pass",
+        "description": "Comma-separated. Matched against the focused window class and title."
+      },
+      {
+        "key": "showIndicator",
+        "type": "boolean",
+        "label": "Show the bar icon",
+        "defaultValue": true,
+        "description": "Off hides the icon and keeps Blip running. Disarm with the keybind instead."
+      },
+      {
+        "key": "disabledActions",
+        "type": "string",
+        "label": "Disabled actions",
+        "defaultValue": "",
+        "description": "Comma-separated action ids switched off in the Blip panel."
+      }
+    ]
+  }
+}

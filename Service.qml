@@ -1,0 +1,553 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import qs.Commons
+import "Detect.js" as Detect
+import "Actions.js" as Actions
+import "Transforms.js" as Transforms
+
+Item {
+  id: service
+
+  property var shell: null
+  property var manifest: null
+
+  readonly property string pluginId: "yogeshojha.blip"
+  readonly property string home: Quickshell.env("HOME")
+  readonly property string pluginDir: manifest && manifest.__sourceDir ? String(manifest.__sourceDir) : ""
+  readonly property string userDir: home + "/.config/omarchy/blip"
+
+  readonly property var settings: {
+    var config = shell ? shell.shellConfig : null
+    return Util.isPlainObject(config) ? entryFor(config) : ({})
+  }
+
+  function entryFor(config) {
+    var sections = ["left", "center", "right"]
+    var layout = Util.isPlainObject(config.bar) ? config.bar.layout : null
+    for (var s = 0; s < sections.length; s++) {
+      var list = Util.isPlainObject(layout) ? layout[sections[s]] : null
+      if (!Array.isArray(list)) continue
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && String(list[i].id) === pluginId) return list[i]
+      }
+    }
+    if (Array.isArray(config.plugins)) {
+      for (var j = 0; j < config.plugins.length; j++) {
+        if (config.plugins[j] && String(config.plugins[j].id) === pluginId) return config.plugins[j]
+      }
+    }
+    return ({})
+  }
+
+  function setting(key) {
+    var value = settings ? settings[key] : undefined
+    if (value !== undefined && value !== null) return value
+    var defaults = manifest && Util.isPlainObject(manifest.barWidget) ? manifest.barWidget.defaults : null
+    return defaults ? defaults[key] : undefined
+  }
+
+  function persist(key, value) {
+    if (!shell || typeof shell.updateEntryInline !== "function") return
+    var next = {}
+    for (var existing in settings) next[existing] = settings[existing]
+    next[key] = value
+    shell.updateEntryInline(pluginId, next)
+  }
+
+  readonly property bool armed: setting("armed") !== false
+  readonly property bool automatic: String(setting("trigger")) !== "Keybind only"
+  readonly property bool grabKeyboard: setting("grabKeyboard") === true
+  readonly property bool centred: String(setting("position")) === "Screen centre"
+  readonly property bool allowNetwork: setting("allowNetwork") === true
+  readonly property bool pauseWhenSharing: setting("pauseWhenSharing") !== false
+  readonly property bool showIndicator: setting("showIndicator") !== false
+  readonly property int minLength: Math.max(1, Number(setting("minLength")) || 2)
+  readonly property int maxLength: Math.max(200, Number(setting("maxLength")) || 20000)
+  readonly property int maxActions: Math.max(1, Number(setting("maxActions")) || 6)
+  readonly property int debounceMs: Math.max(0, Number(setting("debounceMs")) || 0)
+  readonly property int dwellMs: Math.max(1, Number(setting("dwellSeconds")) || 4) * 1000
+  readonly property var blocklist: {
+    var raw = String(setting("blockedApps") || "").split(",")
+    var out = []
+    for (var i = 0; i < raw.length; i++) {
+      var entry = raw[i].replace(/^\s+|\s+$/g, "").toLowerCase()
+      if (entry.length) out.push(entry)
+    }
+    return out
+  }
+
+  readonly property var disabledSet: {
+    var raw = String(setting("disabledActions") || "").split(",")
+    var out = ({})
+    for (var i = 0; i < raw.length; i++) {
+      var id = raw[i].replace(/^\s+|\s+$/g, "")
+      if (id.length) out[id] = true
+    }
+    return out
+  }
+
+  function isActionEnabled(id) {
+    return disabledSet[String(id)] !== true
+  }
+
+  function setActionsEnabled(ids, enabled) {
+    var next = ({})
+    for (var key in disabledSet) next[key] = true
+    for (var i = 0; i < ids.length; i++) {
+      if (enabled) delete next[String(ids[i])]
+      else next[String(ids[i])] = true
+    }
+    var list = []
+    for (var id in next) list.push(id)
+    list.sort()
+    persist("disabledActions", list.join(","))
+  }
+
+  function setActionEnabled(id, enabled) {
+    setActionsEnabled([id], enabled)
+  }
+
+  property string selection: ""
+  property string lastApp: ""
+  property bool sharing: false
+  property bool skipFirstEvent: true
+  property var pending: null
+
+  property var fileEntries: []
+  property var runtimeEntries: []
+  property var consented: ({})
+  property var catalogErrors: []
+
+  readonly property var catalog: Actions.mergeCatalog(fileEntries.concat(runtimeEntries))
+  readonly property var activeCatalog: {
+    var out = []
+    for (var i = 0; i < catalog.length; i++) {
+      if (disabledSet[catalog[i].id] !== true) out.push(catalog[i])
+    }
+    return out
+  }
+  readonly property var modules: Actions.groupCatalog(catalog)
+  readonly property bool suppressed: sharing && pauseWhenSharing
+
+  function setArmed(value) {
+    if (!value) {
+      popup.close()
+      selection = ""
+    }
+    persist("armed", value === true)
+  }
+
+  function toggleArmed() {
+    setArmed(!armed)
+  }
+
+  function openActionsDir() {
+    Quickshell.execDetached(["bash", "-c", 'mkdir -p "$1" && xdg-open "$1"', "blip", userDir + "/actions"])
+  }
+
+  function isBlocked(text) {
+    var haystack = String(text || "").toLowerCase()
+    if (!haystack.length) return false
+    for (var i = 0; i < blocklist.length; i++) {
+      if (haystack.indexOf(blocklist[i]) !== -1) return true
+    }
+    return false
+  }
+
+  function onSelectionLine(line) {
+    var encoded = String(line || "").replace(/^\s+|\s+$/g, "")
+    if (skipFirstEvent) {
+      skipFirstEvent = false
+      return
+    }
+    if (!encoded.length) {
+      if (popup.opened && popup.mode === "actions" && !popup.keyboardActive && !popup.busy)
+        popup.close()
+      return
+    }
+    var text = Transforms.utf8(Transforms.decodeBase64(encoded))
+    if (!text || !text.length) return
+    selection = text
+    if (!automatic) return
+    popup.close()
+    debounce.restart()
+  }
+
+  function present(text, focus) {
+    if (!armed) return "disarmed"
+    if (suppressed) return "sharing"
+    var value = String(text || "")
+    if (value.replace(/^\s+|\s+$/g, "").length < minLength) return "too short"
+    if (value.length > maxLength) return "too long"
+    pending = { text: value, focus: focus === true }
+    if (!probe.running) probe.running = true
+    return "ok"
+  }
+
+  function applyProbe(raw) {
+    var request = pending
+    pending = null
+    if (!request) return
+
+    var lines = String(raw || "").split("\n")
+    var point = String(lines[0] || "").split(",")
+    var x = Math.round(Number(point[0]))
+    var y = Math.round(Number(point[1]))
+    var window = String(lines[1] || "").split("\t")
+    lastApp = window[0] || ""
+    sharing = String(lines[2] || "").indexOf("sharing") === 0
+
+    if (!armed || suppressed) return
+    if (isBlocked(lastApp) || isBlocked(window[1] || "")) return
+
+    var detection = Detect.detect(request.text)
+    detection.primaryLabel = Detect.label(detection.primary)
+
+    var menu = Actions.build(activeCatalog, detection, {
+      app: lastApp,
+      allowNetwork: allowNetwork,
+      limit: maxActions
+    })
+    if (!menu.all.length) return
+
+    for (var i = 0; i < menu.all.length; i++) {
+      var entry = menu.all[i]
+      entry.needsConsent = entry.network && consented[entry.id] !== true
+      entry.host = entry.network ? Actions.hostOf(entry, detection) : ""
+    }
+
+    popup.present(detection, menu, isFinite(x) ? x : 0, isFinite(y) ? y : 0, request.focus || grabKeyboard)
+  }
+
+  Timer {
+    id: debounce
+    interval: service.debounceMs
+    onTriggered: service.present(service.selection, false)
+  }
+
+  Process {
+    id: watcher
+    command: [
+      "setpriv", "--pdeathsig", "TERM",
+      "wl-paste", "--primary", "--type", "text", "--watch",
+      "bash", "-c",
+      "[[ ${CLIPBOARD_STATE:-} == sensitive ]] && exit 0; head -c 400000 | base64 -w0; echo"
+    ]
+    stdout: SplitParser {
+      onRead: function(line) { service.onSelectionLine(line) }
+    }
+    onRunningChanged: if (running) service.skipFirstEvent = true
+    onExited: if (service.armed) watcherRestart.restart()
+  }
+
+  Timer {
+    id: watcherRestart
+    interval: 1000
+    onTriggered: watcher.running = service.armed
+  }
+
+  onArmedChanged: watcher.running = armed
+  Component.onCompleted: watcher.running = armed
+
+  readonly property string sharingScript: ""
+    + "pgrep -x gpu-screen-recorder >/dev/null && exit 0; "
+    + "pgrep -x wf-recorder >/dev/null && exit 0; "
+    + "command -v pw-dump >/dev/null || exit 1; "
+    + "pw-dump 2>/dev/null | jq -e 'any(.[]?; "
+    + ".info.props[\"media.class\"] == \"Stream/Output/Video\" and "
+    + "((.info.props[\"node.name\"] // \"\") | test(\"xdpw|screen|cast\"; \"i\")))' >/dev/null"
+
+  Process {
+    id: probe
+    command: ["bash", "-c",
+      "hyprctl cursorpos; "
+      + "hyprctl -j activewindow | jq -r '(.class // \"\") + \"\\t\" + (.title // \"\")'; "
+      + "if " + service.sharingScript + "; then echo sharing; else echo clear; fi"]
+    stdout: StdioCollector {
+      id: probeOut
+      waitForEnd: true
+      onStreamFinished: service.applyProbe(text)
+    }
+  }
+
+  Process {
+    id: sharingProbe
+    command: ["bash", "-c", service.sharingScript]
+    onExited: function(exitCode) { service.sharing = exitCode === 0 }
+  }
+
+  Timer {
+    running: service.armed && service.pauseWhenSharing
+    interval: 5000
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: if (!sharingProbe.running) sharingProbe.running = true
+  }
+
+  function loadCatalog(raw) {
+    var loaded = Actions.loadCatalog(raw)
+    fileEntries = loaded.entries
+    catalogErrors = loaded.errors
+    for (var i = 0; i < loaded.errors.length; i++) console.warn("blip: " + loaded.errors[i])
+  }
+
+  function rescan() {
+    if (scan.running) return
+    scan.command = ["bash", "-c", scanScript, service.pluginDir, service.userDir]
+    scan.running = true
+  }
+
+  readonly property string scanScript: ""
+    + "shopt -s nullglob; "
+    + "emit() { printf '===%s::%s===\\n' \"$1\" \"$2\"; cat -- \"$2\"; printf '\\n=== EOF ===\\n'; }; "
+    + "scan() { local origin=$1 dir=$2; [[ -d $dir ]] || return 0; "
+    + "  for file in \"$dir\"/*.jsonc \"$dir\"/*.json; do [[ -f $file ]] && emit \"$origin\" \"$file\"; done; }; "
+    + "mkdir -p \"$1/actions\" \"$1/packs\"; "
+    + "scan builtin \"$0/actions\"; "
+    + "for pack in \"$1\"/packs/*/; do scan pack \"$pack/actions\"; done; "
+    + "scan user \"$1/actions\""
+
+  Process {
+    id: scan
+    stdout: StdioCollector {
+      id: scanOut
+      waitForEnd: true
+      onStreamFinished: service.loadCatalog(text)
+    }
+    onExited: catalogWatcher.running = true
+  }
+
+  Process {
+    id: catalogWatcher
+    command: ["inotifywait", "-m", "-r", "-q", "-e", "close_write,create,delete,move",
+      "--format", "%w%f", service.userDir]
+    stdout: SplitParser {
+      onRead: function() { rescanDebounce.restart() }
+    }
+    onExited: if (service.pluginDir) catalogWatcherRestart.restart()
+  }
+
+  Timer {
+    id: catalogWatcherRestart
+    interval: 2000
+    onTriggered: catalogWatcher.running = true
+  }
+
+  Timer {
+    id: rescanDebounce
+    interval: 200
+    onTriggered: service.rescan()
+  }
+
+  onPluginDirChanged: if (pluginDir) rescan()
+
+  FileView {
+    id: consentFile
+    path: service.userDir + "/consent.json"
+    watchChanges: true
+    printErrors: false
+    onLoaded: service.applyConsent(text())
+    onLoadFailed: service.applyConsent("")
+    onFileChanged: reload()
+  }
+
+  function applyConsent(raw) {
+    var next = ({})
+    try {
+      var parsed = JSON.parse(String(raw || "").trim() || "{}")
+      var ids = Array.isArray(parsed.allowed) ? parsed.allowed : []
+      for (var i = 0; i < ids.length; i++) next[String(ids[i])] = true
+    } catch (e) {}
+    consented = next
+  }
+
+  function grantConsent(id) {
+    if (consented[id]) return
+    var next = ({})
+    var ids = []
+    for (var key in consented) { next[key] = true; ids.push(key) }
+    next[id] = true
+    ids.push(id)
+    consented = next
+    consentFile.setText(JSON.stringify({ allowed: ids }, null, 2) + "\n")
+  }
+
+  function forgetConsent() {
+    consented = ({})
+    consentFile.setText(JSON.stringify({ allowed: [] }, null, 2) + "\n")
+  }
+
+  Popup {
+    id: popup
+    service: service
+
+    onRunRequested: function(action) {
+      if (action.network && !service.consented[action.id]) service.grantConsent(action.id)
+      runner.run(action, popup.detection)
+    }
+    onCopyRequested: function(text) {
+      runner.copyText(text)
+      popup.flash("Copied")
+    }
+  }
+
+  Runner {
+    id: runner
+    service: service
+
+    onCompleted: function(action, payload) {
+      if (!popup.busy) return
+      if (!payload.ok) {
+        popup.showResult({ title: "Failed", body: payload.body || "No output", tone: "urgent", render: "text" })
+        return
+      }
+      switch (action.output) {
+      case "show":
+        if (!payload.body.length) { popup.flash("Nothing to show"); return }
+        popup.showResult(payload)
+        return
+      case "copy":
+        runner.copyText(payload.copy)
+        popup.flash("Copied")
+        return
+      case "replace":
+        runner.copyText(payload.copy)
+        popup.close()
+        runner.pasteBack()
+        return
+      }
+      if (action.keepOpen) popup.busy = false
+      else popup.close()
+    }
+  }
+
+  IpcHandler {
+    target: "blip"
+
+    function ping(): string { return "ok" }
+
+    function trigger(): string {
+      if (popup.opened && !popup.keyboardActive) { popup.setKeyboard(true); return "focused" }
+      if (popup.opened) { popup.close(); return "closed" }
+      return service.present(service.selection, true)
+    }
+
+    function show(): string { return service.present(service.selection, true) }
+    function hide(): string { popup.close(); return "ok" }
+
+    function arm(): string { service.setArmed(true); return "armed" }
+    function disarm(): string { service.setArmed(false); return "disarmed" }
+    function toggle(): string {
+      var next = !service.armed
+      service.setArmed(next)
+      return next ? "armed" : "disarmed"
+    }
+
+    function state(): string {
+      return JSON.stringify({
+        armed: service.armed,
+        automatic: service.automatic,
+        sharing: service.sharing,
+        open: popup.opened,
+        actions: service.catalog.length,
+        active: service.activeCatalog.length,
+        errors: service.catalogErrors
+      })
+    }
+
+    function actions(): string {
+      var list = []
+      for (var i = 0; i < service.catalog.length; i++) {
+        var action = service.catalog[i]
+        var run = action.run.kind
+        if (action.run.builtin) run += ":" + action.run.builtin
+        else if (action.run.script) run += ":" + action.run.script
+        else if (action.run.target) run += ":" + action.run.target + "." + action.run.method
+        list.push({
+          id: action.id,
+          label: action.label,
+          origin: action.origin,
+          types: action.when.types,
+          matches: action.when.matches,
+          network: action.network,
+          output: action.output,
+          enabled: service.isActionEnabled(action.id),
+          run: run
+        })
+      }
+      return JSON.stringify(list, null, 2)
+    }
+
+    function enable(id: string): string { service.setActionEnabled(id, true); return "ok" }
+    function disable(id: string): string { service.setActionEnabled(id, false); return "ok" }
+
+    function set(key: string, value: string): string {
+      var name = String(key)
+      var defaults = service.manifest && Util.isPlainObject(service.manifest.barWidget)
+        ? service.manifest.barWidget.defaults : null
+      if (!defaults || defaults[name] === undefined) return "error: unknown setting '" + name + "'"
+      var raw = String(value)
+      var coerced
+      if (raw === "true") coerced = true
+      else if (raw === "false") coerced = false
+      else if (raw !== "" && isFinite(Number(raw))) coerced = Number(raw)
+      else coerced = raw
+      service.persist(name, coerced)
+      return "ok"
+    }
+
+    function get(key: string): string {
+      return JSON.stringify(service.setting(String(key)))
+    }
+
+    function register(json: string): string {
+      var parsed
+      try {
+        parsed = JSON.parse(json)
+      } catch (e) {
+        return "error: " + e
+      }
+      var list = Array.isArray(parsed) ? parsed : [parsed]
+      var next = service.runtimeEntries.filter(function(entry) {
+        for (var i = 0; i < list.length; i++) {
+          if (list[i] && String(list[i].id) === entry.id) return false
+        }
+        return true
+      })
+      for (var j = 0; j < list.length; j++) {
+        var result = Actions.normalizeAction(list[j], "pack", "ipc")
+        if (result.error) return "error: " + result.error
+        next.push(result.action)
+      }
+      service.runtimeEntries = next
+      return "ok"
+    }
+
+    function unregister(id: string): string {
+      var key = String(id)
+      service.runtimeEntries = service.runtimeEntries.filter(function(entry) { return entry.id !== key })
+      return "ok"
+    }
+
+    function reload(): string { service.rescan(); return "ok" }
+    function forget(): string { service.forgetConsent(); return "ok" }
+
+    function detect(text: string): string {
+      var detection = Detect.detect(text)
+      detection.primaryLabel = Detect.label(detection.primary)
+      var menu = Actions.build(service.activeCatalog, detection, {
+        app: service.lastApp,
+        allowNetwork: service.allowNetwork,
+        limit: service.maxActions
+      })
+      return JSON.stringify({
+        types: detection.types,
+        primary: detection.primary,
+        label: detection.primaryLabel,
+        instant: Transforms.instant(detection, Date.now()),
+        actions: menu.all.map(function(action) { return action.id })
+      }, null, 2)
+    }
+  }
+}
