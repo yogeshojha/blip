@@ -365,7 +365,11 @@ Item {
   }
 
   onArmedChanged: watcher.running = armed
-  Component.onCompleted: watcher.running = armed
+  Component.onCompleted: {
+    watcher.running = armed
+    // A crash skips onDestruction, so sweep the consuming set at startup too.
+    passiveKeys.sweep()
+  }
 
   readonly property string sharingScript: ""
     + "pgrep -x gpu-screen-recorder >/dev/null && exit 0; "
@@ -555,6 +559,120 @@ Item {
     }
   }
 
+  // Unfocused, the popup cannot hear a key, so Hyprland holds them while it is up:
+  // the letters the chips advertise are consumed, the rest pass through and dismiss.
+  QtObject {
+    id: passiveKeys
+
+    readonly property var filler: [
+      "a","b","c","d","e","f","g","h","i","j","k","l","m",
+      "n","o","p","q","r","s","t","u","v","w","x","y","z",
+      "0","1","2","3","4","5","6","7","8","9",
+      "Return","Tab","BackSpace","space","Left","Right","Up","Down"
+    ]
+
+    property var bound: []
+    // One missed character is the worst a collision can cost.
+    property bool disarmed: false
+
+    // A result binds no filler: a stray key must not wipe out what is being read.
+    function keyPlan() {
+      if (popup.mode === "result") return { consume: ["Return", "c"], filler: false }
+      if (popup.mode === "confirm") return { consume: ["Return"], filler: false }
+
+      var consume = []
+      if (!disarmed) {
+        var rows = popup.rows || []
+        for (var i = 0; i < rows.length; i++) {
+          var key = String(rows[i].accelerator || "").toLowerCase()
+          if (key.length === 1) consume.push(key)
+        }
+        if (popup.answer) consume.push("equal")
+        if (popup.hasOverflow) consume.push("Tab")
+        consume.push("Left")
+        consume.push("Right")
+      }
+      return { consume: consume, filler: true }
+    }
+
+    function apply() {
+      // Keyboard-active popups hold real focus and read keys directly.
+      if (!popup.opened || popup.keyboardActive) { clear(); return }
+
+      var plan = keyPlan()
+      var taken = ({})
+      for (var i = 0; i < plan.consume.length; i++) taken[plan.consume[i]] = true
+
+      // This re-runs on every mode change; without the unbinds the sets stack.
+      var lua = []
+      for (var d = 0; d < bound.length; d++) lua.push('hl.unbind("' + bound[d] + '")')
+
+      var next = []
+      // Escape also reaches the window, which clears the selection behind it.
+      lua.push(bindLine("Escape", "omarchy-shell blip key escape", true))
+      next.push("Escape")
+      for (var j = 0; j < plan.consume.length; j++) {
+        lua.push(bindLine(plan.consume[j], "omarchy-shell blip key " + plan.consume[j], false))
+        next.push(plan.consume[j])
+      }
+      if (plan.filler) {
+        for (var k = 0; k < filler.length; k++) {
+          var key = filler[k]
+          if (taken[key]) continue
+          lua.push(bindLine(key, "omarchy-shell blip dismiss", true))
+          next.push(key)
+        }
+      }
+
+      dispatch(lua)
+      bound = next
+    }
+
+    function bindLine(key, command, passThrough) {
+      return 'hl.bind("' + key + '", hl.dsp.exec_cmd("' + command + '"), {non_consuming='
+        + (passThrough ? "true" : "false") + '})'
+    }
+
+    function clear() {
+      if (!bound.length) return
+      var lua = []
+      for (var i = 0; i < bound.length; i++) lua.push('hl.unbind("' + bound[i] + '")')
+      bound = []
+      dispatch(lua)
+    }
+
+    // Only what can be bound consuming: a leak there eats the key system wide.
+    function sweep() {
+      var lua = []
+      var extra = ["equal", "Tab", "Return", "Left", "Right"]
+      for (var i = 0; i < filler.length; i++) {
+        if (filler[i].length !== 1) continue
+        lua.push('hl.unbind("' + filler[i] + '")')
+      }
+      for (var j = 0; j < extra.length; j++) lua.push('hl.unbind("' + extra[j] + '")')
+      dispatch(lua)
+    }
+
+    // hyprctl keyword is refused by the Lua config parser, so binds go through eval.
+    function dispatch(lua) {
+      if (!lua.length) return
+      Quickshell.execDetached(["hyprctl", "eval", lua.join(" ")])
+    }
+  }
+
+  Connections {
+    target: popup
+    function onOpenedChanged() {
+      if (!popup.opened) passiveKeys.disarmed = false
+      passiveKeys.apply()
+    }
+    function onKeyboardActiveChanged() { passiveKeys.apply() }
+    function onModeChanged() { passiveKeys.apply() }
+    function onExpandedChanged() { passiveKeys.apply() }
+  }
+
+  Component.onDestruction: passiveKeys.clear()
+
   IpcHandler {
     target: "blip"
 
@@ -568,6 +686,29 @@ Item {
 
     function show(): string { return service.present(service.selection, true) }
     function hide(): string { popup.close(); return "ok" }
+
+    // Routed here by the Hyprland binds the popup registers while it is up.
+    function key(name: string): string {
+      if (!popup.opened) return "closed"
+      var value = String(name || "")
+      if (value === "escape" || value === "Escape") { popup.back(); return "back" }
+      if (value === "Return") return popup.pressReturn() ? "ran" : "ignored"
+      if (value === "Tab") return popup.pressTab() ? "expanded" : "ignored"
+      if (value === "Left") return popup.pressMove(-1) ? "moved" : "ignored"
+      if (value === "Right") return popup.pressMove(1) ? "moved" : "ignored"
+      if (value === "equal") return popup.pressAnswer() ? "copied" : "ignored"
+      if (value === "c" && popup.mode === "result")
+        return popup.copyResult() ? "copied" : "ignored"
+      if (value.length === 1
+          && (popup.activateByKey(value) || popup.activateByKey(value.toUpperCase())))
+        return "ran"
+      // Anything else was a real keystroke on its way to the focused window.
+      passiveKeys.disarmed = true
+      popup.close()
+      return "dismissed"
+    }
+
+    function dismiss(): string { popup.close(); return "ok" }
 
     function arm(): string { service.setArmed(true); return "armed" }
     function disarm(): string { service.setArmed(false); return "disarmed" }
@@ -583,6 +724,8 @@ Item {
         automatic: service.automatic,
         sharing: service.sharing,
         open: popup.opened,
+        keyboard: popup.keyboardActive,
+        bound: passiveKeys.bound.length,
         actions: service.catalog.length,
         active: service.activeCatalog.length,
         packs: service.packList.length,

@@ -67,7 +67,7 @@
         "type": "boolean",
         "label": "Take the keyboard right away",
         "defaultValue": false,
-        "description": "Off means the bar appears without taking focus, and your keybind hands it the keyboard. On means arrows and letters work immediately."
+        "description": "Off means the bar answers Escape and its action letters without taking focus, so everything else you type still reaches the window you selected in. On means it takes the keyboard outright, adding arrows and Tab."
       },
       {
         "key": "position",

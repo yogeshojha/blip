@@ -39,6 +39,9 @@ Item {
   readonly property bool confirmNetwork: !!pendingConfirm && pendingConfirm.needsConsent === true
   readonly property string typeLabel: detection ? String(detection.primaryLabel || "") : ""
 
+  // The accelerators run unfocused too, so the badges follow those, not the focus.
+  readonly property bool keysLive: opened && (keyboardActive || mode === "actions")
+
   readonly property int pad: Style.spacing.popupPadding
   readonly property int gap: Style.spacing.sm
   readonly property int chipHeight: Math.max(Style.space(28), Style.font.body + Style.spacing.controlPaddingY * 2)
@@ -122,7 +125,7 @@ Item {
     if (!action || busy) return
     if ((action.confirm || action.needsConsent) && !pendingConfirm) {
       pendingConfirm = action
-      setKeyboard(true)
+      holdKeyboard()
       return
     }
     pendingConfirm = null
@@ -153,7 +156,45 @@ Item {
   function showResult(payload) {
     busy = false
     result = payload
-    setKeyboard(true)
+    holdKeyboard()
+  }
+
+  // Grabbing here would drop the service's binds for a focus we may not be granted.
+  function holdKeyboard() {
+    if (keyboardActive || (service && service.grabKeyboard)) setKeyboard(true)
+    else restartDwell()
+  }
+
+  // Routed in from the service's binds; each mirrors a branch of the focused handler.
+  function pressReturn() {
+    if (result) { copyRequested(result.copy); return true }
+    activate()
+    return true
+  }
+
+  function pressTab() {
+    if (!hasOverflow) return false
+    setExpanded(!expanded)
+    return true
+  }
+
+  // Left and right only: up and down stay dismiss keys, so history and scroll survive.
+  function pressMove(delta) {
+    if (result || pendingConfirm || !rows.length) return false
+    move(delta)
+    return true
+  }
+
+  function pressAnswer() {
+    if (!answer) return false
+    copyRequested(answer.copy)
+    return true
+  }
+
+  function copyResult() {
+    if (!result) return false
+    copyRequested(result.copy)
+    return true
   }
 
   function flash(message) {
@@ -398,7 +439,7 @@ Item {
           }
 
           Loader {
-            active: root.notice === "" && root.mode === "actions" && root.keyboardActive
+            active: root.notice === "" && root.mode === "actions" && root.keysLive
             visible: active
             sourceComponent: keyHint
           }
@@ -604,7 +645,7 @@ Item {
           action: modelData
           selected: root.index === index
           paintSelection: false
-          showKey: root.keyboardActive
+          showKey: root.keysLive
           onClicked: { root.index = index; root.activate() }
           onHovered: root.index = index
 
@@ -698,7 +739,7 @@ Item {
               action: modelData
               selected: root.index === index
               paintSelection: false
-              showKey: root.keyboardActive
+              showKey: root.keysLive
               onClicked: { root.index = index; root.activate() }
               onHovered: root.index = index
             }

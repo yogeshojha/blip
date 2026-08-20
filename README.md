@@ -34,8 +34,10 @@ the keyboard if it is already up, closes it if it already has the keyboard.
 ## Use
 
 Select something. The bar fades in just above the pointer, flips below it when
-there is no room, and never takes focus unless you ask. Move the pointer well
-away and it closes; leave it alone and it fades after a few seconds.
+there is no room, and never takes focus. `Esc` closes it and the action letters
+on the chips run their action, both without focus; anything else you type
+dismisses the bar and lands in the window you selected in, untouched. Move the
+pointer well away and it closes; leave it alone and it fades after a few seconds.
 
 | Key | |
 |---|---|

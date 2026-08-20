@@ -1,0 +1,131 @@
+Blip manual selection fixtures
+==============================
+
+Select any line below and the bar should appear over it. Every sample stands
+alone on its line, so a triple click grabs the selection and nothing else.
+
+The bar takes no focus. Escape closes it, the letters on the chips run their
+action, left and right move, Tab shows the overflow, "=" copies an instant
+answer. Up, down and every other key dismiss the bar and reach the window you
+selected in, untouched.
+
+Selections shorter than the minimum length setting are ignored, which is why
+every sample here is at least five characters.
+
+
+LINKS AND ADDRESSES
+-------------------
+
+A url gets Open and QR. An email gets Mail and QR. An ip gets Whois, which stays
+hidden until network actions are allowed and asks for consent the first time.
+
+https://example.com/docs/getting-started?ref=blip#install
+hello@example.com
+192.168.1.42
+2001:0db8:85a3:0000:0000:8a2e:0370:7334
+8.8.8.8
+
+
+TOKENS AND ENCODINGS
+--------------------
+
+A jwt gets Decode with the expiry flagged, and only if its header and payload
+really parse. Base64, percent-encoded and hex selections get Decode. Hashes and
+uuids are recognised but carry the plain set.
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJibGlwLW1hbnVhbC10ZXN0IiwibmFtZSI6IkV4cGlyZWQgVG9rZW4iLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6MTcwMDAwMDAwMH0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJibGlwLW1hbnVhbC10ZXN0IiwibmFtZSI6IkxpdmUgVG9rZW4iLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6NDEwMjQ0NDgwMH0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+QmxpcCBkZWNvZGVzIHRoaXMgc2VsZWN0aW9u
+hello%20world%20%26%20friends%3F
+0x1F4A9
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+d41d8cd98f00b204e9800998ecf8427e
+123e4567-e89b-12d3-a456-426614174000
+
+
+STRUCTURED DATA
+---------------
+
+Minified json gets Format, formatted json gets Minify. Either lands in the
+result mode, where Return and "c" copy and Escape backs out.
+
+{"id":42,"name":"blip","tags":["cli","wayland"],"ok":true}
+
+
+PATHS
+-----
+
+A path gets Open, Edit, Reveal and Terminal here.
+
+~/.config/omarchy/blip/actions
+/usr/share/hypr/stubs/hl.meta.lua
+
+
+INSTANT ANSWERS
+---------------
+
+These are answered on the bar itself, before you press anything. A timestamp
+shows its local time, a sum shows its result, a colour shows its rgb next to a
+live swatch, a measurement shows its conversion. Press "=" to copy the answer.
+
+1516239022
+23*4+18
+(1920 * 1080) / 2
+#1e88e5
+100 mi
+180 lb
+98.6 F
+60 mph
+3 gal
+26.2 mi
+
+
+PLAIN TEXT AND CODE
+-------------------
+
+Anything at all gets Copy, Search, Ask agent and Run, plus the text transforms
+under Tab: Count, UPPER, lower, Title, To base64, Percent-encode.
+
+serendipity
+The quick brown fox jumps over the lazy dog.
+const total = items.reduce((sum, item) => sum + item.price, 0)
+Traceback (most recent call last): FileNotFoundError: no such file
+
+
+MULTILINE
+---------
+
+Select all four lines together.
+
+alpha one
+beta two
+gamma three
+delta four
+
+
+SHOULD NOT MATCH
+----------------
+
+Detection validates rather than guesses, so none of these should get the action
+its shape suggests. Each one falls back to the plain set: "and/or" and "24/7"
+are not paths, a clock is not an ipv6 address, prose that mentions an error is
+not an error, a lowercase word that happens to decode is not base64, a stray
+brace is not json, and three dotted words are not a jwt.
+
+this and/or that
+open 24/7 all week
+12:34:56
+the error message was helpful and clear
+serendipity
+{ this is just a brace in prose
+aaa.bbb.ccc
+
+
+CONFIRM AND RESULT MODES
+------------------------
+
+Run asks before it runs anything. Press "r", then Return to run or Escape to
+cancel. Decoding a token or formatting the json above lands in the result mode,
+where Return and "c" copy the result and Escape backs out to the actions.
+
+echo hello-from-blip
