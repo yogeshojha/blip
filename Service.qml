@@ -145,6 +145,7 @@ Item {
   property var fileEntries: []
   property var runtimeEntries: []
   property var consented: ({})
+  readonly property int consentCount: Object.keys(consented).length
   property var catalogErrors: []
 
   readonly property var catalog: Actions.mergeCatalog(fileEntries.concat(runtimeEntries))
@@ -620,6 +621,8 @@ Item {
         if (popup.hasOverflow) consume.push("Tab")
         consume.push("Left")
         consume.push("Right")
+        if (popup.expanded) { consume.push("Up"); consume.push("Down") }
+        if (popup.expanded || popup.navigated) consume.push("Return")
       }
       return { consume: consume, filler: true }
     }
@@ -698,6 +701,7 @@ Item {
     function onKeyboardActiveChanged() { passiveKeys.apply() }
     function onModeChanged() { passiveKeys.apply() }
     function onExpandedChanged() { passiveKeys.apply() }
+    function onNavigatedChanged() { passiveKeys.apply() }
   }
 
   Component.onDestruction: passiveKeys.clear()
@@ -723,8 +727,8 @@ Item {
       if (value === "escape" || value === "Escape") { popup.back(); return "back" }
       if (value === "Return") return popup.pressReturn() ? "ran" : "ignored"
       if (value === "Tab") return popup.pressTab() ? "expanded" : "ignored"
-      if (value === "Left") return popup.pressMove(-1) ? "moved" : "ignored"
-      if (value === "Right") return popup.pressMove(1) ? "moved" : "ignored"
+      if (value === "Left" || value === "Up") return popup.pressMove(-1) ? "moved" : "ignored"
+      if (value === "Right" || value === "Down") return popup.pressMove(1) ? "moved" : "ignored"
       if (value === "equal") return popup.pressAnswer() ? "copied" : "ignored"
       if (value === "c" && popup.mode === "result")
         return popup.copyResult() ? "copied" : "ignored"

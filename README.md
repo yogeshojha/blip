@@ -34,24 +34,23 @@ the keyboard if it is already up, closes it if it already has the keyboard.
 ## Use
 
 Select something. The bar fades in just above the pointer, flips below it when
-there is no room, and never takes focus. `Esc` closes it and the action letters
-on the chips run their action, both without focus; anything else you type
-dismisses the bar and lands in the window you selected in, untouched. Move the
-pointer well away and it closes; leave it alone and it fades after a few seconds.
+there is no room, and never takes focus. Move the pointer well away and it
+closes; leave it alone and it fades after a few seconds.
 
 | Key | |
 |---|---|
 | a letter on a chip | run that action |
 | `←` `→` | move |
-| `↑` `↓` | dismiss, and reach your window |
-| `Enter` | run |
+| `↑` `↓` | dismiss — in the overflow, move |
+| `Enter` | run the highlighted action |
 | `=` | copy the instant answer, when there is one |
 | `Tab` | show everything, including the overflow |
 | `Esc` | back out one level, then close |
 
-Only the letters printed on the chips are taken. Every other key dismisses the
-bar and lands in the window you selected in, so `↑` still reaches your shell
-history and typing carries on where it was going.
+Only the letters printed on the chips are taken — and `Enter`, once `←` `→`
+have highlighted something. Every other key dismisses the bar and lands in the
+window you selected in, so `↑` still reaches your shell history, `Enter` still
+sends your message, and typing carries on where it was going.
 
 ![Every action for a plain sentence](screenshots/all-actions.png)
 
@@ -103,32 +102,35 @@ is the full reference.
 
 ## Search
 
-`Search` opens DuckDuckGo by default. The control panel cycles it through Google,
-Brave and Kagi, or takes a url of your own with `%s` where the selection goes:
+`Search` opens DuckDuckGo by default. The control panel offers Google, Brave
+and Kagi, or takes a url of your own with `%s` where the selection goes:
 
 ```
 https://lobste.rs/search?q=%s
 ```
 
 Blip's own `${enc}` works there in place of `%s`, as do `${text}` and `${type}`,
-so a custom search can key off what was detected. A url with no placeholder at
-all is refused, and Search falls back to DuckDuckGo rather than searching for
-nothing.
+so a custom search can key off what was detected. A url with no placeholder is
+refused; Search falls back to DuckDuckGo.
 
 `GitHub` sits beside it on `g` and goes straight to GitHub code search, which
-wants you signed in. Both leave Copy further down the bar: `Ctrl+C` already
-exists, and in a terminal Copy is still there for the `Ctrl+Shift+C` case.
+wants you signed in.
 
 ## Control panel
 
-Click the bar icon for the armed switch, the behaviour toggles, the tuning
-sliders, and a switch for every module and every action, so you can turn off
-the text tools, or just `Run`, without touching a file. The PACKS section
-installs action packs from a pasted git URL and updates or removes the ones
-you have — see [ACTIONS.md](ACTIONS.md#action-packs). It is fully
-keyboard-driven. Right-click the icon to arm and disarm without opening it;
-middle-click shows the bar for the current selection. A keybind opens it too:
-`omarchy-shell blip-panel toggle`.
+![The control panel with the Core module open](screenshots/control-panel.png)
+
+Click the bar icon and the whole panel fits in one view: the armed switch, the
+behaviour toggles, the search engine, and a row per module. A module opens into
+a grid of chips — the same chips the bar shows — and clicking one turns that
+action off or on, so you can drop the text tools, or just `Run`, without
+touching a file; the module's switch, or `Space`, flips them all at once. Packs
+install from a pasted git URL and update or remove from the same fold — see
+[ACTIONS.md](ACTIONS.md#action-packs) — and the sliders sit folded under
+*Fine-tuning*, values readable on the closed row. `↑↓` move, `←→` fold and
+unfold, `Enter` selects. Right-click the icon to arm and disarm without opening
+it; middle-click shows the bar for the current selection. A keybind opens it
+too: `omarchy-shell blip-panel toggle`.
 
 `Setup > Plugins > Blip` holds the same settings. Hide the icon with the *Show
 the bar icon* setting rather than by removing the widget from the bar: the

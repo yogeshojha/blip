@@ -45,8 +45,8 @@ Panel {
     { key: "trigger", label: "Show automatically", description: "Show the bar as soon as you select something" },
     { key: "grabKeyboard", label: "Take the keyboard", description: "Arrows and letters work the moment it appears" },
     { key: "position", label: "Centre on screen", description: "Instead of just above the pointer" },
-    { key: "allowNetwork", label: "Allow network actions", description: "Still asks before the first send, once per action" },
-    { key: "pauseWhenSharing", label: "Pause while sharing", description: "No bar over a screen share or a recording" }
+    { key: "pauseWhenSharing", label: "Pause while sharing", description: "No bar over a screen share or a recording" },
+    { key: "allowNetwork", label: "Allow network actions", description: "Shows actions that send the selection, like Whois" }
   ]
 
   readonly property var sliderSpecs: ({
@@ -58,25 +58,45 @@ Panel {
 
   readonly property var sliderOrder: ["dwellSeconds", "maxActions", "minLength", "debounceMs"]
 
+  readonly property string tuningSummary: {
+    if (!blip) return ""
+    return Math.round(blip.dwellMs / 1000) + "s fade · " + blip.maxActions + " on the bar · "
+      + blip.minLength + "+ chars · " + blip.debounceMs + "ms settle"
+  }
+
+  property var expandedModules: ({})
+  property bool packsExpanded: false
+  property bool tuningExpanded: false
+  property int chipCursor: 0
+  // returnRequested precedes activateRequested only for Enter; that tells it from Space.
+  property bool enterKey: false
+
+  // Collapsing by mouse while the install field is focused would leave the
+  // keyboard routed to a hidden editor.
+  onPacksExpandedChanged: if (!packsExpanded && installField.activeFocus) keyCatcher.forceActiveFocus()
+
   readonly property var navRows: {
     var rows = [{ kind: "hero", id: "hero" }]
     for (var i = 0; i < quickToggles.length; i++)
       rows.push({ kind: "toggle", id: quickToggles[i].key, spec: quickToggles[i] })
+    if (blip && blip.consentCount > 0) rows.push({ kind: "consent", id: "consent" })
     rows.push({ kind: "choice", id: "searchEngine" })
     if (blip && blip.searchEngine === "Custom") rows.push({ kind: "searchurl", id: "searchurl" })
-    for (var s = 0; s < sliderOrder.length; s++)
-      rows.push({ kind: "slider", id: sliderOrder[s] })
     for (var m = 0; m < modules.length; m++) {
       rows.push({ kind: "module", id: modules[m].key, module: modules[m] })
-      for (var a = 0; a < modules[m].actions.length; a++)
-        rows.push({ kind: "action", id: modules[m].actions[a].id, action: modules[m].actions[a] })
+      if (expandedModules[modules[m].key] === true)
+        rows.push({ kind: "chips", id: modules[m].key, module: modules[m] })
     }
-    rows.push({ kind: "packinstall", id: "install" })
-    for (var p = 0; p < packs.length; p++)
-      rows.push({ kind: "pack", id: packs[p].name, pack: packs[p] })
-    rows.push({ kind: "button", id: "reload" })
-    rows.push({ kind: "button", id: "folder" })
-    rows.push({ kind: "button", id: "forget" })
+    rows.push({ kind: "packs", id: "packs" })
+    if (packsExpanded) {
+      rows.push({ kind: "packinstall", id: "install" })
+      for (var p = 0; p < packs.length; p++)
+        rows.push({ kind: "pack", id: packs[p].name, pack: packs[p] })
+    }
+    rows.push({ kind: "tuning", id: "tuning" })
+    if (tuningExpanded)
+      for (var s = 0; s < sliderOrder.length; s++)
+        rows.push({ kind: "slider", id: sliderOrder[s] })
     return rows
   }
 
@@ -85,6 +105,8 @@ Panel {
 
   readonly property var cursorRow: cursorActive && cursor >= 0 && cursor < navRows.length ? navRows[cursor] : null
   readonly property string cursorId: cursorRow ? String(cursorRow.kind) + ":" + String(cursorRow.id) : ""
+
+  onCursorIdChanged: if (cursorRow && cursorRow.kind === "chips") chipCursor = 0
 
   function setCursorTo(kind, id) {
     cursorActive = true
@@ -100,20 +122,49 @@ Panel {
     cursor = Math.max(0, Math.min(navRows.length - 1, cursor + dy))
   }
 
-  function activateCursor() {
+  function isModuleExpanded(key) {
+    return expandedModules[String(key)] === true
+  }
+
+  function setModuleExpanded(key, on) {
+    var next = {}
+    for (var existing in expandedModules) next[existing] = expandedModules[existing]
+    if (on) next[String(key)] = true
+    else delete next[String(key)]
+    expandedModules = next
+    setCursorTo("module", key)
+  }
+
+  function activateCursor(viaEnter) {
     var row = cursorRow
     if (!row || !blip) return
     if (row.kind === "hero") blip.toggleArmed()
     else if (row.kind === "toggle") flipToggle(row.id)
-    else if (row.kind === "module") toggleModule(row.module)
-    else if (row.kind === "action") blip.setActionEnabled(row.id, !blip.isActionEnabled(row.id))
-    else if (row.kind === "choice") blip.cycleSearchEngine(1)
+    else if (row.kind === "consent") forgetConsents()
+    else if (row.kind === "choice") searchDropdown.toggle()
     else if (row.kind === "searchurl") searchField.forceActiveFocus()
+    else if (row.kind === "module") {
+      if (viaEnter === false) toggleModule(row.module)
+      else setModuleExpanded(row.id, !isModuleExpanded(row.id))
+    }
+    else if (row.kind === "chips") toggleChip(row.module)
+    else if (row.kind === "packs") packsExpanded = !packsExpanded
     else if (row.kind === "packinstall") installField.forceActiveFocus()
     else if (row.kind === "pack") notePackResult(blip.packUpdate(row.id))
-    else if (row.kind === "button" && row.id === "reload") blip.rescan()
-    else if (row.kind === "button" && row.id === "folder") blip.openActionsDir()
-    else if (row.kind === "button" && row.id === "forget") blip.forgetConsent()
+    else if (row.kind === "tuning") tuningExpanded = !tuningExpanded
+  }
+
+  function forgetConsents() {
+    if (!blip) return
+    blip.forgetConsent()
+    setCursorTo("toggle", "allowNetwork")
+  }
+
+  function toggleChip(module) {
+    if (!blip || !module) return
+    if (chipCursor < 0 || chipCursor >= module.actions.length) return
+    var id = String(module.actions[chipCursor].id)
+    blip.setActionEnabled(id, !blip.isActionEnabled(id))
   }
 
   // Refused operations (busy, bad url) surface here instead of vanishing.
@@ -133,6 +184,14 @@ Panel {
     var row = cursorRow
     if (!row || !blip) return
     if (row.kind === "choice") { blip.cycleSearchEngine(dx); return }
+    if (row.kind === "module") { setModuleExpanded(row.id, dx > 0); return }
+    if (row.kind === "packs") { packsExpanded = dx > 0; return }
+    if (row.kind === "tuning") { tuningExpanded = dx > 0; return }
+    if (row.kind === "chips") {
+      var count = row.module ? row.module.actions.length : 0
+      if (count > 0) chipCursor = Math.max(0, Math.min(count - 1, chipCursor + dx))
+      return
+    }
     if (row.kind !== "slider") return
     var spec = sliderSpecs[row.id]
     var value = sliderValue(row.id)
@@ -199,12 +258,19 @@ Panel {
     })
   }
 
-  onOpenedChanged: if (opened) {
-    cursorActive = false
-    cursor = 0
-    if (flick) flick.contentY = 0
-    panelIntro.restart()
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  onOpenedChanged: {
+    if (opened) {
+      cursorActive = false
+      cursor = 0
+      if (flick) flick.contentY = 0
+      panelIntro.restart()
+      Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    } else {
+      // Collapse while hidden so reopening never shows the fold-up.
+      expandedModules = ({})
+      packsExpanded = false
+      tuningExpanded = false
+    }
   }
 
   BarIconButton {
@@ -238,19 +304,24 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(400))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(620))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      // While the install field is being typed into, every key belongs to it.
-      blocked: installField.activeFocus
+      // While an inline editor or the dropdown popup owns the keys, every
+      // key belongs to it.
+      blocked: installField.activeFocus || searchField.activeFocus || searchDropdown.popupOpen
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
         if (dy !== 0) root.moveCursor(dy)
         else if (dx !== 0) root.adjustCursor(dx)
       }
-      onActivateRequested: if (root.cursorActive) root.activateCursor()
+      onReturnRequested: root.enterKey = true
+      onActivateRequested: {
+        if (root.cursorActive) root.activateCursor(root.enterKey)
+        root.enterKey = false
+      }
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onDeleteRequested: {
@@ -259,6 +330,7 @@ Panel {
       }
       onTextKey: function(t) {
         if (t === "r" || t === "R") { if (root.blip) root.blip.rescan() }
+        else if (t === "e") { if (root.blip) root.blip.openActionsDir() }
         else if (t === "g") {
           root.cursorActive = true
           root.cursor = 0
@@ -388,6 +460,8 @@ Panel {
                 spec: modelData
               }
             }
+
+            ConsentRow { width: parent.width }
           }
 
           PanelSeparator { foreground: root.foreground }
@@ -398,33 +472,175 @@ Panel {
             fontFamily: root.fontFamily
           }
 
-          SettingChoiceRow { width: parent.width }
-          SearchUrlRow { width: parent.width }
-
-          PanelSeparator { foreground: root.foreground }
-
-          PanelSectionHeader {
-            text: "TUNING"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-          }
-
-          Column {
+          CursorSurface {
+            id: searchChoiceRow
             width: parent.width
-            spacing: Style.space(4)
+            hasCursor: root.cursorId === "choice:searchEngine" && !searchDropdown.popupOpen
+            foreground: root.foreground
+            implicitHeight: searchChoiceContent.implicitHeight + Style.space(12)
 
-            SettingSliderRow { width: parent.width; settingKey: "dwellSeconds" }
-            SettingSliderRow { width: parent.width; settingKey: "maxActions"; ticks: 10 }
-            SettingSliderRow { width: parent.width; settingKey: "minLength" }
-            SettingSliderRow { width: parent.width; settingKey: "debounceMs" }
+            onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(searchChoiceRow)
+
+            MouseArea {
+              anchors.fill: parent
+              hoverEnabled: true
+              acceptedButtons: Qt.NoButton
+              onEntered: root.setCursorTo("choice", "searchEngine")
+            }
+
+            Row {
+              id: searchChoiceContent
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.leftMargin: Style.space(10)
+              anchors.rightMargin: Style.space(10)
+              spacing: Style.space(8)
+
+              Column {
+                width: parent.width - searchDropdown.width - parent.spacing
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(1)
+
+                Text {
+                  width: parent.width
+                  text: "Search with"
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                  elide: Text.ElideRight
+                }
+
+                Text {
+                  width: parent.width
+                  text: "Where the Search action sends the selection"
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  elide: Text.ElideRight
+                }
+              }
+
+              Dropdown {
+                id: searchDropdown
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(140)
+                showLabel: false
+                options: {
+                  var out = []
+                  var engines = root.blip ? root.blip.searchEngines : []
+                  for (var i = 0; i < engines.length; i++) out.push(engines[i].name)
+                  return out
+                }
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onChanged: function(next) { if (root.blip) root.blip.persist("searchEngine", next) }
+                onHovered: function(on) { if (on) root.setCursorTo("choice", "searchEngine") }
+                onPopupOpenChanged: if (!popupOpen) keyCatcher.forceActiveFocus()
+              }
+
+              // The popup assigns value imperatively on select, which would
+              // sever a plain binding to the service.
+              Binding {
+                target: searchDropdown
+                property: "value"
+                value: root.blip ? root.blip.searchEngine : ""
+              }
+            }
+          }
+
+          CursorSurface {
+            id: searchUrlRow
+
+            readonly property bool custom: root.blip !== null && root.blip.searchEngine === "Custom"
+            readonly property bool valid: root.blip ? root.blip.customSearchValid : false
+
+            width: parent.width
+            visible: custom
+            hasCursor: root.cursorId === "searchurl:searchurl" && !searchField.activeFocus
+            foreground: root.foreground
+            implicitHeight: custom ? searchUrlContent.implicitHeight + Style.space(12) : 0
+
+            onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(searchUrlRow)
+
+            MouseArea {
+              anchors.fill: parent
+              hoverEnabled: true
+              acceptedButtons: Qt.NoButton
+              onEntered: root.setCursorTo("searchurl", "searchurl")
+            }
+
+            Column {
+              id: searchUrlContent
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.leftMargin: Style.space(10)
+              anchors.rightMargin: Style.space(10)
+              spacing: Style.space(4)
+
+              TextField {
+                id: searchField
+                width: parent.width
+                placeholderText: "https://github.com/search?q=%s&type=code"
+                text: root.blip ? root.blip.customSearch : ""
+                foreground: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                onAccepted: if (root.blip) root.blip.persist("searchUrl", text)
+                Keys.onEscapePressed: keyCatcher.forceActiveFocus()
+              }
+
+              Text {
+                width: parent.width
+                text: searchUrlRow.valid
+                  ? "Enter to save."
+                  : "Put %s where the selection goes, then press Enter. Until then, DuckDuckGo."
+                color: searchUrlRow.valid ? root.dim : root.urgent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
+            }
           }
 
           PanelSeparator { foreground: root.foreground }
 
-          PanelSectionHeader {
-            text: "MODULES"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(actionsHeader.implicitHeight, actionsHeaderButtons.implicitHeight)
+
+            PanelSectionHeader {
+              id: actionsHeader
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              text: "ACTIONS"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Row {
+              id: actionsHeaderButtons
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(4)
+
+              PanelActionButton {
+                iconText: "󰑐"
+                tooltipText: "Rescan action files (r)"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onClicked: if (root.blip) root.blip.rescan()
+              }
+
+              PanelActionButton {
+                iconText: "󰝒"
+                tooltipText: "Open your actions folder (e)"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onClicked: if (root.blip) root.blip.openActionsDir()
+              }
+            }
           }
 
           Repeater {
@@ -441,12 +657,122 @@ Panel {
                 module: parent.module
               }
 
-              Repeater {
-                model: parent.module.actions
+              ModuleChipsArea {
+                width: parent.width
+                module: parent.module
+              }
+            }
+          }
 
-                ActionToggleRow {
-                  width: column.width
-                  action: modelData
+          PanelSeparator { foreground: root.foreground }
+
+          PacksHeaderRow { width: parent.width }
+
+          Item {
+            width: parent.width
+            clip: true
+            visible: implicitHeight > 0
+            implicitHeight: root.packsExpanded ? packsColumn.implicitHeight : 0
+            opacity: root.packsExpanded ? 1 : 0
+
+            Behavior on implicitHeight { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 160 } }
+
+            Column {
+              id: packsColumn
+              width: parent.width
+              spacing: Style.space(6)
+
+              CursorSurface {
+                id: installRow
+                width: parent.width
+                hasCursor: root.cursorId === "packinstall:install" && !installField.activeFocus
+                foreground: root.foreground
+                implicitHeight: installContent.implicitHeight + Style.space(12)
+
+                onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(installRow)
+
+                MouseArea {
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  acceptedButtons: Qt.NoButton
+                  onEntered: root.setCursorTo("packinstall", "install")
+                }
+
+                Row {
+                  id: installContent
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.leftMargin: Style.space(10)
+                  anchors.rightMargin: Style.space(10)
+                  spacing: Style.space(8)
+
+                  TextField {
+                    id: installField
+                    width: parent.width - installButton.implicitWidth - parent.spacing
+                    anchors.verticalCenter: parent.verticalCenter
+                    placeholderText: "https://github.com/…/blip-pack-…"
+                    foreground: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    enabled: !(root.blip && root.blip.packBusy)
+                    onAccepted: root.submitPackInstall()
+                    onTextChanged: root.installNote = ""
+                    Keys.onEscapePressed: keyCatcher.forceActiveFocus()
+                  }
+
+                  Button {
+                    id: installButton
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Install"
+                    iconText: "󰇚"
+                    bordered: true
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.bodySmall
+                    enabled: installField.text.length > 0 && !(root.blip && root.blip.packBusy)
+                    onClicked: root.submitPackInstall()
+                  }
+                }
+              }
+
+              Text {
+                visible: text !== ""
+                width: parent.width
+                // A running operation outranks a stale validation note.
+                text: root.blip && root.blip.packBusy ? root.blip.packStatus
+                  : (root.installNote !== "" ? root.installNote : (root.blip ? root.blip.packStatus : ""))
+                color: (root.blip && root.blip.packBusy) ? root.dim
+                  : (root.installNote !== "" || (root.blip && root.blip.packStatusUrgent) ? root.urgent : root.dim)
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WrapAnywhere
+                maximumLineCount: 2
+                elide: Text.ElideRight
+              }
+
+              Text {
+                visible: root.packs.length === 0
+                width: parent.width
+                text: "A pack is a git repo with actions/*.jsonc and scripts/."
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
+
+              Column {
+                width: parent.width
+                spacing: Style.space(4)
+
+                Repeater {
+                  model: root.packs
+
+                  PackRow {
+                    width: parent.width
+                    pack: modelData
+                  }
                 }
               }
             }
@@ -454,139 +780,33 @@ Panel {
 
           PanelSeparator { foreground: root.foreground }
 
-          PanelSectionHeader {
-            text: "PACKS"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-          }
+          TuningHeaderRow { width: parent.width }
 
-          CursorSurface {
-            id: installRow
+          Item {
             width: parent.width
-            hasCursor: root.cursorId === "packinstall:install" && !installField.activeFocus
-            foreground: root.foreground
-            implicitHeight: installContent.implicitHeight + Style.space(12)
+            clip: true
+            visible: implicitHeight > 0
+            implicitHeight: root.tuningExpanded ? slidersColumn.implicitHeight : 0
+            opacity: root.tuningExpanded ? 1 : 0
 
-            onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(installRow)
+            Behavior on implicitHeight { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 160 } }
 
-            MouseArea {
-              anchors.fill: parent
-              hoverEnabled: true
-              acceptedButtons: Qt.NoButton
-              onEntered: root.setCursorTo("packinstall", "install")
-            }
+            Column {
+              id: slidersColumn
+              width: parent.width
+              spacing: Style.space(4)
 
-            Row {
-              id: installContent
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.leftMargin: Style.space(10)
-              anchors.rightMargin: Style.space(10)
-              spacing: Style.space(8)
-
-              TextField {
-                id: installField
-                width: parent.width - installButton.implicitWidth - parent.spacing
-                anchors.verticalCenter: parent.verticalCenter
-                placeholderText: "https://github.com/…/blip-pack-…"
-                foreground: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
-                enabled: !(root.blip && root.blip.packBusy)
-                onAccepted: root.submitPackInstall()
-                onTextChanged: root.installNote = ""
-                Keys.onEscapePressed: keyCatcher.forceActiveFocus()
-              }
-
-              Button {
-                id: installButton
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Install"
-                iconText: "󰇚"
-                bordered: true
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                fontSize: Style.font.bodySmall
-                enabled: installField.text.length > 0 && !(root.blip && root.blip.packBusy)
-                onClicked: root.submitPackInstall()
-              }
-            }
-          }
-
-          Text {
-            visible: text !== ""
-            width: parent.width
-            // A running operation outranks a stale validation note.
-            text: root.blip && root.blip.packBusy ? root.blip.packStatus
-              : (root.installNote !== "" ? root.installNote : (root.blip ? root.blip.packStatus : ""))
-            color: (root.blip && root.blip.packBusy) ? root.dim
-              : (root.installNote !== "" || (root.blip && root.blip.packStatusUrgent) ? root.urgent : root.dim)
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            wrapMode: Text.WrapAnywhere
-            maximumLineCount: 2
-            elide: Text.ElideRight
-          }
-
-          Text {
-            visible: root.packs.length === 0
-            width: parent.width
-            text: "None yet. Paste a git URL above — a pack is a repo with actions/*.jsonc and scripts/."
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            wrapMode: Text.WordWrap
-          }
-
-          Column {
-            width: parent.width
-            spacing: Style.space(4)
-
-            Repeater {
-              model: root.packs
-
-              PackRow {
-                width: parent.width
-                pack: modelData
-              }
-            }
-          }
-
-          PanelSeparator { foreground: root.foreground }
-
-          Row {
-            width: parent.width
-            spacing: Style.space(8)
-
-            FooterButton {
-              buttonId: "reload"
-              text: "Reload"
-              iconText: "󰑐"
-              tooltipText: "Rescan action files now"
-              onClicked: if (root.blip) root.blip.rescan()
-            }
-
-            FooterButton {
-              buttonId: "folder"
-              text: "Edit actions"
-              iconText: "󰝒"
-              tooltipText: "Open your actions folder"
-              onClicked: if (root.blip) root.blip.openActionsDir()
-            }
-
-            FooterButton {
-              buttonId: "forget"
-              text: "Consents"
-              iconText: "󰃢"
-              tooltipText: "Ask again before any network action sends"
-              onClicked: if (root.blip) root.blip.forgetConsent()
+              SettingSliderRow { width: parent.width; settingKey: "dwellSeconds" }
+              SettingSliderRow { width: parent.width; settingKey: "maxActions"; ticks: 10 }
+              SettingSliderRow { width: parent.width; settingKey: "minLength" }
+              SettingSliderRow { width: parent.width; settingKey: "debounceMs" }
             }
           }
 
           Text {
             width: parent.width
-            text: "↑↓ move · Enter toggle · Esc close"
+            text: "↑↓ move · ←→ open · Enter select · Esc close"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -663,119 +883,52 @@ Panel {
     }
   }
 
-  component SettingChoiceRow: CursorSurface {
-    id: choiceRow
+  component ConsentRow: CursorSurface {
+    id: consentRow
 
-    readonly property string engine: root.blip ? root.blip.searchEngine : ""
+    readonly property int count: root.blip ? root.blip.consentCount : 0
 
-    hasCursor: root.cursorId === "choice:searchEngine"
+    visible: count > 0
+    hasCursor: root.cursorId === "consent:consent"
     foreground: root.foreground
-    implicitHeight: choiceContent.implicitHeight + Style.space(12)
+    implicitHeight: visible ? consentContent.implicitHeight + Style.space(8) : 0
 
-    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(choiceRow)
+    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(consentRow)
 
     MouseArea {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursorTo("choice", "searchEngine")
-      onClicked: if (root.blip) root.blip.cycleSearchEngine(1)
+      onEntered: root.setCursorTo("consent", "consent")
+      onClicked: root.forgetConsents()
     }
 
     Row {
-      id: choiceContent
+      id: consentContent
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       anchors.leftMargin: Style.space(10)
       anchors.rightMargin: Style.space(10)
-      spacing: Style.space(8)
-
-      Column {
-        width: parent.width - choiceValue.width - parent.spacing
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(1)
-
-        Text {
-          width: parent.width
-          text: "Search with"
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.body
-          elide: Text.ElideRight
-        }
-
-        Text {
-          width: parent.width
-          text: "Where the Search action sends the selection. Click to cycle."
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          elide: Text.ElideRight
-        }
-      }
+      spacing: Style.space(6)
 
       Text {
-        id: choiceValue
         anchors.verticalCenter: parent.verticalCenter
-        text: choiceRow.engine
-        color: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-      }
-    }
-  }
-
-  component SearchUrlRow: CursorSurface {
-    id: urlRow
-
-    readonly property bool custom: root.blip && root.blip.searchEngine === "Custom"
-    readonly property bool valid: root.blip ? root.blip.customSearchValid : false
-
-    visible: custom
-    hasCursor: root.cursorId === "searchurl:searchurl"
-    foreground: root.foreground
-    implicitHeight: custom ? urlContent.implicitHeight + Style.space(12) : 0
-
-    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(urlRow)
-
-    MouseArea {
-      anchors.fill: parent
-      hoverEnabled: true
-      acceptedButtons: Qt.NoButton
-      onEntered: root.setCursorTo("searchurl", "searchurl")
-    }
-
-    Column {
-      id: urlContent
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(10)
-      anchors.rightMargin: Style.space(10)
-      spacing: Style.space(4)
-
-      TextField {
-        id: searchField
-        width: parent.width
-        placeholderText: "https://github.com/search?q=%s&type=code"
-        text: root.blip ? root.blip.customSearch : ""
-        foreground: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        onAccepted: if (root.blip) root.blip.persist("searchUrl", text)
-        Keys.onEscapePressed: keyCatcher.forceActiveFocus()
-      }
-
-      Text {
-        width: parent.width
-        text: urlRow.valid
-          ? "Enter to save."
-          : "Put %s where the selection goes, then press Enter. Until then, DuckDuckGo."
-        color: urlRow.valid ? root.dim : root.urgent
+        text: "󰃢"
+        color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
-        wrapMode: Text.WordWrap
+      }
+
+      Text {
+        width: parent.width - parent.children[0].implicitWidth - parent.spacing
+        anchors.verticalCenter: parent.verticalCenter
+        text: consentRow.count + (consentRow.count === 1 ? " action" : " actions")
+          + " allowed to send · forget"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
       }
     }
   }
@@ -853,6 +1006,8 @@ Panel {
     id: moduleRow
 
     property var module: null
+    readonly property string moduleKey: module ? String(module.key) : ""
+    readonly property bool expanded: root.isModuleExpanded(moduleKey)
     readonly property int total: module ? module.actions.length : 0
     readonly property int enabledCount: {
       if (!root.blip || !module) return 0
@@ -864,7 +1019,7 @@ Panel {
       return n
     }
 
-    hasCursor: root.cursorId === "module:" + (module ? module.key : "")
+    hasCursor: root.cursorId === "module:" + moduleKey
     foreground: root.foreground
     implicitHeight: moduleContent.implicitHeight + Style.space(12)
 
@@ -874,8 +1029,8 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursorTo("module", moduleRow.module ? moduleRow.module.key : "")
-      onClicked: root.toggleModule(moduleRow.module)
+      onEntered: root.setCursorTo("module", moduleRow.moduleKey)
+      onClicked: root.setModuleExpanded(moduleRow.moduleKey, !moduleRow.expanded)
     }
 
     Row {
@@ -888,7 +1043,7 @@ Panel {
       spacing: Style.space(8)
 
       Column {
-        width: parent.width - moduleTrack.width - parent.spacing
+        width: parent.width - moduleTrack.width - moduleChevron.width - parent.spacing * 2
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(1)
 
@@ -917,73 +1072,208 @@ Panel {
         id: moduleTrack
         anchors.verticalCenter: parent.verticalCenter
         checked: moduleRow.enabledCount === moduleRow.total && moduleRow.total > 0
-        interactive: false
         cursorRing: false
         trackHeight: Style.space(18)
         foreground: root.foreground
+        onToggled: root.toggleModule(moduleRow.module)
+
+        PanelToolTip {
+          visible: moduleTrack.containsMouse
+          text: (moduleRow.enabledCount === moduleRow.total ? "Turn every action off" : "Turn every action on") + " (Space)"
+          fontFamily: root.fontFamily
+        }
+      }
+
+      Text {
+        id: moduleChevron
+        anchors.verticalCenter: parent.verticalCenter
+        text: moduleRow.expanded ? "󰅀" : "󰅂"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.body
       }
     }
   }
 
-  component ActionToggleRow: CursorSurface {
-    id: actionRow
+  component ModuleChipsArea: Item {
+    id: chipsArea
+
+    property var module: null
+    readonly property string moduleKey: module ? String(module.key) : ""
+    readonly property bool shown: root.isModuleExpanded(moduleKey)
+    readonly property bool isCursored: root.cursorId === "chips:" + moduleKey
+    readonly property var cursorAction: isCursored && module
+      && root.chipCursor >= 0 && root.chipCursor < module.actions.length
+      ? module.actions[root.chipCursor] : null
+
+    clip: true
+    visible: implicitHeight > 0
+    implicitHeight: shown ? chipsInner.implicitHeight + Style.space(6) : 0
+    opacity: shown ? 1 : 0
+
+    Behavior on implicitHeight { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: 160 } }
+
+    onIsCursoredChanged: if (isCursored) root.scrollItemIntoView(chipsArea)
+
+    Column {
+      id: chipsInner
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(10)
+      spacing: Style.space(6)
+
+      Flow {
+        width: parent.width
+        spacing: Style.space(6)
+
+        Repeater {
+          model: chipsArea.module ? chipsArea.module.actions : []
+
+          PanelChip {
+            action: modelData
+            enabledValue: root.blip ? root.blip.isActionEnabled(String(modelData.id)) : true
+            cursored: chipsArea.isCursored && index === root.chipCursor
+            onHoveredChip: {
+              root.setCursorTo("chips", chipsArea.moduleKey)
+              root.chipCursor = index
+            }
+            onClicked: {
+              root.setCursorTo("chips", chipsArea.moduleKey)
+              root.chipCursor = index
+              if (root.blip) root.blip.setActionEnabled(String(modelData.id),
+                !root.blip.isActionEnabled(String(modelData.id)))
+            }
+          }
+        }
+      }
+
+      // Fixed-height so the grid doesn't jump as descriptions come and go.
+      Item {
+        width: parent.width
+        height: Style.font.caption + Style.space(4)
+
+        Text {
+          width: parent.width
+          text: chipsArea.cursorAction
+            ? String(chipsArea.cursorAction.description || chipsArea.cursorAction.label || "")
+            : ""
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          elide: Text.ElideRight
+        }
+      }
+    }
+  }
+
+  component PanelChip: BorderSurface {
+    id: chip
 
     property var action: null
-    readonly property string actionId: action ? String(action.id) : ""
-    readonly property bool enabledValue: !root.blip || root.blip.disabledSet[actionId] !== true
+    property bool enabledValue: true
+    property bool cursored: false
 
-    hasCursor: root.cursorId === "action:" + actionId
-    foreground: root.foreground
-    implicitHeight: actionContent.implicitHeight + Style.space(10)
+    signal clicked()
+    signal hoveredChip()
 
-    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(actionRow)
+    readonly property string glyph: action ? String(action.icon || "") : ""
+    readonly property string label: action ? String(action.label || "") : ""
+
+    implicitWidth: chipBody.implicitWidth + Style.spacing.controlPaddingX * 2
+    implicitHeight: Math.max(Style.space(26), Style.font.body + Style.spacing.controlPaddingY * 2)
+    radius: Style.cornerRadius
+    color: cursored ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+    borderSpec: cursored
+      ? Border.controlSpec("hover-cursor", root.foreground, Color.accent)
+      : (enabledValue ? Border.controlSpec("normal", root.foreground, Color.accent) : Border.none())
+
+    Behavior on color { ColorAnimation { duration: 80 } }
+
+    Row {
+      id: chipBody
+      anchors.centerIn: parent
+      spacing: Style.spacing.xs
+
+      Text {
+        visible: chip.glyph !== ""
+        anchors.verticalCenter: parent.verticalCenter
+        text: chip.glyph
+        color: chip.enabledValue ? root.foreground : root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.icon
+        opacity: chip.enabledValue ? 1.0 : 0.6
+      }
+
+      Text {
+        visible: chip.label !== ""
+        anchors.verticalCenter: parent.verticalCenter
+        text: chip.label
+        color: chip.enabledValue ? root.foreground : root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+      }
+    }
 
     MouseArea {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursorTo("action", actionRow.actionId)
-      onClicked: if (root.blip) root.blip.setActionEnabled(actionRow.actionId, !actionRow.enabledValue)
+      onEntered: chip.hoveredChip()
+      onClicked: chip.clicked()
+    }
+  }
+
+  component PacksHeaderRow: CursorSurface {
+    id: packsRow
+
+    hasCursor: root.cursorId === "packs:packs"
+    foreground: root.foreground
+    implicitHeight: packsHeaderContent.implicitHeight + Style.space(12)
+
+    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(packsRow)
+
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onEntered: root.setCursorTo("packs", "packs")
+      onClicked: root.packsExpanded = !root.packsExpanded
     }
 
     Row {
-      id: actionContent
+      id: packsHeaderContent
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(18)
+      anchors.leftMargin: Style.space(10)
       anchors.rightMargin: Style.space(10)
       spacing: Style.space(8)
 
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        width: Style.font.icon
-        horizontalAlignment: Text.AlignHCenter
-        text: actionRow.action ? String(actionRow.action.icon || "") : ""
-        color: actionRow.enabledValue ? root.foreground : root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.icon
-        opacity: actionRow.enabledValue ? 1.0 : 0.6
-      }
-
       Column {
-        width: parent.width - Style.font.icon - actionTrack.width - parent.spacing * 2
+        width: parent.width - packsChevron.width - parent.spacing
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 0
+        spacing: Style.space(1)
 
         Text {
           width: parent.width
-          text: actionRow.action ? String(actionRow.action.label || "") : ""
-          color: actionRow.enabledValue ? root.foreground : root.dim
+          text: "Packs"
+          color: root.foreground
           font.family: root.fontFamily
-          font.pixelSize: Style.font.body
+          font.pixelSize: Style.font.subtitle
+          font.bold: true
           elide: Text.ElideRight
         }
 
         Text {
-          visible: text !== ""
           width: parent.width
-          text: actionRow.action ? String(actionRow.action.description || "") : ""
+          text: {
+            if (root.blip && root.blip.packBusy) return root.blip.packStatus
+            if (root.packs.length === 0) return "None yet — add a git repo of actions"
+            return root.packs.length + " installed"
+          }
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -991,14 +1281,75 @@ Panel {
         }
       }
 
-      ToggleSwitch {
-        id: actionTrack
+      Text {
+        id: packsChevron
         anchors.verticalCenter: parent.verticalCenter
-        checked: actionRow.enabledValue
-        interactive: false
-        cursorRing: false
-        trackHeight: Style.space(16)
-        foreground: root.foreground
+        text: root.packsExpanded ? "󰅀" : "󰅂"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.body
+      }
+    }
+  }
+
+  component TuningHeaderRow: CursorSurface {
+    id: tuningRow
+
+    hasCursor: root.cursorId === "tuning:tuning"
+    foreground: root.foreground
+    implicitHeight: tuningContent.implicitHeight + Style.space(12)
+
+    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(tuningRow)
+
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onEntered: root.setCursorTo("tuning", "tuning")
+      onClicked: root.tuningExpanded = !root.tuningExpanded
+    }
+
+    Row {
+      id: tuningContent
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(10)
+      spacing: Style.space(8)
+
+      Column {
+        width: parent.width - tuningChevron.width - parent.spacing
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(1)
+
+        Text {
+          width: parent.width
+          text: "Fine-tuning"
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.subtitle
+          font.bold: true
+          elide: Text.ElideRight
+        }
+
+        Text {
+          width: parent.width
+          text: root.tuningSummary
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          elide: Text.ElideRight
+        }
+      }
+
+      Text {
+        id: tuningChevron
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.tuningExpanded ? "󰅀" : "󰅂"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.body
       }
     }
   }
@@ -1088,20 +1439,5 @@ Panel {
         onClicked: if (root.blip) root.notePackResult(root.blip.packRemove(packRow.packName))
       }
     }
-  }
-
-  component FooterButton: Button {
-    id: footerButton
-
-    property string buttonId: ""
-
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    fontSize: Style.font.bodySmall
-    bordered: true
-    hasCursor: root.cursorId === "button:" + buttonId
-
-    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(footerButton)
-    onHovered: function(on) { if (on) root.setCursorTo("button", buttonId) }
   }
 }

@@ -24,8 +24,7 @@ The directory is watched. Saving a file is all it takes; no restart.
 ```
 
 A file may hold one action or an array of them. A file that fails to parse
-names itself in `omarchy-shell blip state` and in the shell log rather than
-disappearing quietly.
+names itself in `omarchy-shell blip state` and in the shell log.
 
 ## A script
 
@@ -150,7 +149,7 @@ Exactly one of these:
 
 | | |
 |---|---|
-| `exec` | argv array, no shell, so nothing to escape or inject |
+| `exec` | argv array, no shell, nothing to escape or inject |
 | `script` | a file in the sibling `scripts/` directory, selection on stdin |
 | `ipc` | `{ "target": …, "method": … }` on another plugin |
 | `builtin` | one of Blip's own transforms, listed by `omarchy-shell blip actions` |
@@ -174,8 +173,8 @@ https://github.com/search?q=%s&type=code
 
 `${enc}` works there in place of `%s`, as do the other variables above, so a
 custom search can key off `${type}` or send `${base}` rather than the whole
-selection. A url with no placeholder at all is refused and Blip falls back to
-DuckDuckGo, rather than searching for nothing.
+selection. A url with no placeholder is refused; Search falls back to
+DuckDuckGo.
 
 ## Results
 
@@ -216,7 +215,7 @@ A pack is a git repository with the same `actions/` and `scripts/` layout as
 public; name it `blip-pack-<something>` and the prefix is stripped on
 install.
 
-Installing is one line, or none — the panel's PACKS section takes a pasted
+Installing is one line, or none — the panel's Packs fold takes a pasted
 URL, and every installed pack lists there with an update and a remove button:
 
 ```bash
@@ -242,7 +241,7 @@ so install packs the way you install plugins: from authors you trust.
 omarchy-shell blip actions      # every action, with its origin and switch state
 omarchy-shell blip state        # armed, catalogue size, and any parse errors
 omarchy-shell blip detect "x"   # what Blip makes of a selection, popup-free
-omarchy-shell blip disable <id> # the same switch the panel flips
+omarchy-shell blip disable <id> # the same toggle the panel's chips flip
 omarchy-shell blip enable <id>
 omarchy-shell blip set allowNetwork true   # any setting the manifest declares
 omarchy-shell blip packAdd <url>           # and packs, packUpdate, packRemove

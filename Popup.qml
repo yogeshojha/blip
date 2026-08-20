@@ -19,7 +19,9 @@ Item {
   property int cursorX: 0
   property int cursorY: 0
 
+  // -1 selects nothing.
   property int index: 0
+  property bool navigated: false
   property bool expanded: false
   property var result: null
   property var pendingConfirm: null
@@ -34,6 +36,8 @@ Item {
 
   readonly property var rows: expanded ? visibleActions.concat(overflowActions) : visibleActions
   readonly property bool hasOverflow: overflowActions.length > 0
+  readonly property bool moreReachable: hasOverflow && !expanded
+  readonly property bool moreSelected: moreReachable && index === rows.length
   readonly property string mode: result ? "result" : (pendingConfirm ? "confirm" : "actions")
   readonly property bool resultIsQr: !!result && result.render === "qr"
   readonly property bool confirmNetwork: !!pendingConfirm && pendingConfirm.needsConsent === true
@@ -68,7 +72,8 @@ Item {
     overflowActions = menu.overflow
     cursorX = x
     cursorY = y
-    index = 0
+    index = focus === true ? 0 : -1
+    navigated = false
     expanded = false
     listWidthFloor = 0
     result = null
@@ -97,6 +102,7 @@ Item {
   function setKeyboard(active) {
     keyboardActive = active
     if (active) {
+      if (index < 0) index = 0
       focusPrimed = false
       primeTimer.restart()
       Qt.callLater(function() { keys.forceActiveFocus() })
@@ -108,7 +114,7 @@ Item {
   }
 
   function restartDwell() {
-    if (!opened || keyboardActive || hover.hovered || result || pendingConfirm || busy) {
+    if (!opened || keyboardActive || hover.hovered || expanded || result || pendingConfirm || busy) {
       dwellTimer.stop()
       return
     }
@@ -116,11 +122,14 @@ Item {
   }
 
   function move(delta) {
-    if (!rows.length) return
-    index = (index + delta + rows.length) % rows.length
+    var count = rows.length + (moreReachable ? 1 : 0)
+    if (!count) return
+    if (index < 0) { index = delta > 0 ? 0 : count - 1; return }
+    index = (index + delta + count) % count
   }
 
   function activate() {
+    if (moreSelected) { setExpanded(true); return }
     var action = rows[index]
     if (!action || busy) return
     if ((action.confirm || action.needsConsent) && !pendingConfirm) {
@@ -174,6 +183,7 @@ Item {
 
   function pressTab() {
     if (!hasOverflow) return false
+    navigated = true
     setExpanded(!expanded)
     return true
   }
@@ -182,6 +192,7 @@ Item {
   function pressMove(delta) {
     if (result || pendingConfirm || !rows.length) return false
     move(delta)
+    navigated = true
     return true
   }
 
@@ -214,13 +225,19 @@ Item {
   function setExpanded(value) {
     if (value === true && !expanded) listWidthFloor = content.implicitWidth
     expanded = value === true
-    index = Math.max(0, Math.min(index, rows.length - 1))
+    if (expanded) index = index < 0 ? 0 : Math.min(index, rows.length - 1)
+    else if (!navigated) index = -1
+    // Collapsing from an overflow row lands back on the ⋯ chip.
+    else index = Math.min(Math.max(index, 0), rows.length - 1 + (moreReachable ? 1 : 0))
   }
 
   property int listWidthFloor: 0
 
   onModeChanged: if (opened) swapFade.restart()
-  onExpandedChanged: if (opened) swapFade.restart()
+  onExpandedChanged: {
+    if (opened) swapFade.restart()
+    restartDwell()
+  }
   onNoticeChanged: if (opened && notice !== "") swapFade.restart()
 
   Timer {
@@ -532,6 +549,7 @@ Item {
 
       readonly property Item selChip: {
         var deps = root.index + chipRepeater.count
+        if (root.moreSelected) return moreChip
         return chipRepeater.itemAt(root.index)
       }
 
@@ -669,7 +687,10 @@ Item {
         id: moreChip
         visible: root.hasOverflow
         overflowGlyph: "⋯"
-        onClicked: root.setExpanded(true)
+        selected: root.moreSelected
+        paintSelection: false
+        onHovered: root.index = root.visibleActions.length
+        onClicked: { root.index = root.visibleActions.length; root.setExpanded(true) }
 
         opacity: 0
         scale: 0.9

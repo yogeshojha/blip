@@ -16,7 +16,7 @@
     "icon": "󰖟",
     "key": "s",
     "priority": 10,
-    "description": "Opens your browser on the engine set in the panel. Blip sends nothing itself.",
+    "description": "Opens your browser on the engine set in the panel.",
     "when": { "types": ["*"], "maxLength": 400 },
     "run": { "exec": ["xdg-open", "${search}"] }
   },
@@ -26,7 +26,7 @@
     "icon": "󰊤",
     "key": "g",
     "priority": 9,
-    "description": "Searches GitHub code. Blip sends nothing itself.",
+    "description": "Searches GitHub code.",
     "when": { "types": ["*"], "maxLength": 400 },
     "run": { "exec": ["xdg-open", "https://github.com/search?q=${enc}&type=code"] }
   },
