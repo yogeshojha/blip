@@ -147,6 +147,14 @@ Item {
   property var pending: null
   property double suppressUntil: 0
 
+  property double gestureAt: 0
+  property double selectionAt: 0
+  property bool pointerHeld: false
+  property double distrustUntil: 0
+  readonly property int gestureMs: 400
+  readonly property int menuDistrustMs: 2000
+  readonly property int holdMs: 10000
+
   property var fileEntries: []
   property var runtimeEntries: []
   property var consented: ({})
@@ -317,6 +325,20 @@ Item {
     return false
   }
 
+  function trustFor(when) {
+    if (!when) return false
+    if (when < distrustUntil) return false
+    if (pointerHeld && Date.now() - gestureAt <= holdMs) return true
+    return Math.abs(gestureAt - when) <= gestureMs
+  }
+
+  function markGesture(kind) {
+    if (kind === "down") pointerHeld = true
+    else if (kind === "up") pointerHeld = false
+    gestureAt = Date.now()
+    if (popup.opened && !popup.trusted && trustFor(selectionAt)) popup.trusted = true
+  }
+
   function onSelectionLine(line) {
     var encoded = String(line || "").replace(/^\s+|\s+$/g, "")
     if (skipFirstEvent) {
@@ -331,6 +353,7 @@ Item {
     var text = Transforms.utf8(Transforms.decodeBase64(encoded))
     if (!text || !text.length) return
     selection = text
+    selectionAt = Date.now()
     if (!automatic) return
     popup.close()
     debounce.restart()
@@ -344,7 +367,11 @@ Item {
     var value = String(text || "")
     if (value.replace(/^\s+|\s+$/g, "").length < minLength) return "too short"
     if (value.length > maxLength) return "too long"
-    pending = { text: value, focus: focus === true }
+    pending = {
+      text: value,
+      focus: focus === true,
+      trusted: focus === true || trustFor(selectionAt)
+    }
     // Keep the cached sharing state fresh without holding up the cursor read.
     if (pauseWhenSharing && !sharingProbe.running) sharingProbe.running = true
     if (!probe.running) probe.running = true
@@ -385,7 +412,8 @@ Item {
       entry.host = entry.network ? Actions.hostOf(entry, detection) : ""
     }
 
-    popup.present(detection, menu, isFinite(x) ? x : 0, isFinite(y) ? y : 0, request.focus || grabKeyboard)
+    popup.present(detection, menu, isFinite(x) ? x : 0, isFinite(y) ? y : 0,
+                  request.focus || grabKeyboard, request.trusted === true)
   }
 
   Timer {
@@ -420,7 +448,7 @@ Item {
     watcher.running = armed
     // A crash skips onDestruction, so sweep the consuming set at startup too.
     passiveKeys.sweep()
-    pointerGuard.apply()
+    gestureGuard.apply()
   }
 
   readonly property string sharingScript: ""
@@ -644,7 +672,7 @@ Item {
       if (popup.mode === "confirm") return { consume: ["Return"], filler: false }
 
       var consume = []
-      if (!disarmed) {
+      if (!disarmed && popup.adopted) {
         var rows = popup.rows || []
         for (var i = 0; i < rows.length; i++) {
           var key = String(rows[i].accelerator || "").toLowerCase()
@@ -677,7 +705,7 @@ Item {
       lua.push(bindLine("Escape", "omarchy-shell blip key escape", true))
       next.push("Escape")
       // A press away from the card is the user moving on; the bar must not outlive it.
-      var buttons = { "mouse:272": "left", "mouse:274": "middle" }
+      var buttons = { "mouse:274": "middle" }
       for (var button in buttons) {
         lua.push(bindLine(button, "omarchy-shell blip click " + buttons[button], true))
         next.push(button)
@@ -699,6 +727,7 @@ Item {
       bound = next
     }
 
+    // Keys are joined with +, not commas: the Lua parser rejects "CTRL, Left".
     function bindLine(key, command, passThrough) {
       return 'hl.bind("' + key + '", hl.dsp.exec_cmd("' + command + '"), {non_consuming='
         + (passThrough ? "true" : "false") + '})'
@@ -713,9 +742,10 @@ Item {
     }
 
     // Only what can be bound consuming: a leak there eats the key system wide.
+    // Never a key gestureGuard owns: the two dispatches race.
     function sweep() {
       var lua = []
-      var extra = ["equal", "Tab", "Return", "Left", "Right", "mouse:272", "mouse:274"]
+      var extra = ["equal", "Tab", "Return", "Left", "Right", "mouse:274"]
       for (var i = 0; i < filler.length; i++) {
         if (filler[i].length !== 1) continue
         lua.push('hl.unbind("' + filler[i] + '")')
@@ -731,22 +761,74 @@ Item {
     }
   }
 
+  GlobalShortcut {
+    appid: "blip"
+    name: "gesture-pointer"
+    description: "Blip: a pointer selection gesture"
+    onPressed: {
+      service.markGesture("down")
+      if (popup.opened) popup.pressPointer("left")
+    }
+    onReleased: service.markGesture("up")
+  }
+
+  GlobalShortcut {
+    appid: "blip"
+    name: "gesture-pointer-up"
+    description: "Blip: the end of a pointer selection gesture"
+    onPressed: service.markGesture("up")
+  }
+
+  GlobalShortcut {
+    appid: "blip"
+    name: "gesture-key"
+    description: "Blip: a keyboard selection gesture"
+    onPressed: service.markGesture("key")
+  }
+
   // Bound whenever the bar can appear, not only while it is up: an app that selects
   // the word under the pointer on right-click would raise the bar onto its own menu.
   QtObject {
-    id: pointerGuard
+    id: gestureGuard
 
     readonly property bool wanted: service.armed
 
+    readonly property var selectionKeys: [
+      "SHIFT+Left", "SHIFT+Right", "SHIFT+Up", "SHIFT+Down",
+      "SHIFT+Home", "SHIFT+End", "SHIFT+Page_Up", "SHIFT+Page_Down",
+      "CTRL+SHIFT+Left", "CTRL+SHIFT+Right", "CTRL+SHIFT+Up", "CTRL+SHIFT+Down",
+      "CTRL+SHIFT+Home", "CTRL+SHIFT+End", "CTRL+SHIFT+Page_Up", "CTRL+SHIFT+Page_Down",
+      "CTRL+a"
+    ]
+
+    readonly property var keys: ["mouse:273", "mouse:272"].concat(selectionKeys)
+
+    function globalLine(key, shortcut, onRelease) {
+      return 'hl.bind("' + key + '", hl.dsp.global("blip:' + shortcut
+        + '"), {non_consuming=true' + (onRelease ? ", release=true" : "") + '})'
+    }
+
+    function unbindAll() {
+      var lua = []
+      for (var i = 0; i < keys.length; i++) lua.push('hl.unbind("' + keys[i] + '")')
+      return lua
+    }
+
     // Unbind first: a crash leaves the bind behind, and the sweep misses it.
     function apply() {
-      var lua = ['hl.unbind("mouse:273")']
-      if (wanted) lua.push(passiveKeys.bindLine("mouse:273", "omarchy-shell blip click right", true))
+      var lua = unbindAll()
+      if (wanted) {
+        lua.push(passiveKeys.bindLine("mouse:273", "omarchy-shell blip click right", true))
+        lua.push(globalLine("mouse:272", "gesture-pointer"))
+        lua.push(globalLine("mouse:272", "gesture-pointer-up", true))
+        for (var i = 0; i < selectionKeys.length; i++)
+          lua.push(globalLine(selectionKeys[i], "gesture-key"))
+      }
       passiveKeys.dispatch(lua)
     }
 
     function clear() {
-      passiveKeys.dispatch(['hl.unbind("mouse:273")'])
+      passiveKeys.dispatch(unbindAll())
     }
 
     onWantedChanged: apply()
@@ -759,7 +841,7 @@ Item {
     function onRawEvent(event) {
       if (!event || String(event.name) !== "configreloaded") return
       passiveKeys.apply()
-      pointerGuard.apply()
+      gestureGuard.apply()
     }
   }
 
@@ -773,11 +855,12 @@ Item {
     function onModeChanged() { passiveKeys.apply() }
     function onExpandedChanged() { passiveKeys.apply() }
     function onNavigatedChanged() { passiveKeys.apply() }
+    function onAdoptedChanged() { passiveKeys.apply() }
   }
 
   Component.onDestruction: {
     passiveKeys.clear()
-    pointerGuard.clear()
+    gestureGuard.clear()
   }
 
   IpcHandler {
@@ -827,11 +910,19 @@ Item {
       var name = String(button || "")
       if (name === "right") {
         service.suppressUntil = Date.now() + service.contextMenuMs
+        service.distrustUntil = Date.now() + service.menuDistrustMs
         debounce.stop()
         service.pending = null
       }
       if (!popup.opened) return "closed"
       return popup.pressPointer(name) ? "dismissed" : "ignored"
+    }
+
+    function gesture(kind: string): string {
+      var name = String(kind || "")
+      service.markGesture(name)
+      if (name === "down" && popup.opened) popup.pressPointer("left")
+      return name.length ? name : "key"
     }
 
     function arm(): string { service.setArmed(true); return "armed" }
@@ -849,6 +940,10 @@ Item {
         sharing: service.sharing,
         open: popup.opened,
         keyboard: popup.keyboardActive,
+        trusted: popup.trusted,
+        adopted: popup.adopted,
+        held: service.pointerHeld,
+        sinceGesture: service.gestureAt ? Date.now() - service.gestureAt : -1,
         choice: popup.resultChoosing ? popup.resultIndex : -1,
         bound: passiveKeys.bound.length,
         cursor: [popup.cursorX, popup.cursorY],

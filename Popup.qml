@@ -13,6 +13,8 @@ Item {
 
   property bool opened: false
   property bool keyboardActive: false
+  property bool trusted: false
+  readonly property bool adopted: trusted || keyboardActive || hover.hovered
   property var detection: null
   property var visibleActions: []
   property var overflowActions: []
@@ -59,7 +61,7 @@ Item {
   readonly property string typeLabel: detection ? String(detection.primaryLabel || "") : ""
 
   // The accelerators run unfocused too, so the badges follow those, not the focus.
-  readonly property bool keysLive: opened && (keyboardActive || mode === "actions")
+  readonly property bool keysLive: opened && (keyboardActive || (mode === "actions" && adopted))
 
   readonly property int pad: Style.spacing.popupPadding
   readonly property int gap: Style.spacing.sm
@@ -81,7 +83,8 @@ Item {
 
   readonly property var answer: detection ? Transforms.instant(detection, Date.now()) : null
 
-  function present(nextDetection, menu, x, y, focus) {
+  function present(nextDetection, menu, x, y, focus, trust) {
+    trusted = trust === true
     detection = nextDetection
     visibleActions = menu.visible
     overflowActions = menu.overflow
@@ -109,6 +112,7 @@ Item {
     entering = false
     opened = false
     keyboardActive = false
+    trusted = false
     focusPrimed = false
     busy = false
     morphEnabled = false
