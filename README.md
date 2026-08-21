@@ -124,6 +124,42 @@ Drop a `.jsonc` in `~/.config/omarchy/blip/actions/`. No code, no restart.
 An action can open a url, run a script over the selection, or call another
 plugin over IPC and show whatever comes back.
 
+What ships covers what everyone needs. What makes Blip yours is the file only
+you would write.
+
+Say you look up domains all day. Blip's `Whois` fires on an IP only — a bare
+hostname is plain text to it. So write your own:
+
+```jsonc
+{
+  "id": "me.whois",
+  "label": "Whois",
+  "network": true,
+  "host": "the domain's registry",
+  "when": {
+    "notTypes": ["ip", "url", "email"],
+    "matches": "^[a-zA-Z0-9-]+(\\.[a-zA-Z0-9-]+)+$",
+    "notMatches": "\\.(rs|js|ts|py|go|sh|md|json|toml|lock|css|html?)$"
+  },
+  "run": { "script": "whois-domain.sh" },
+  "output": "show"
+}
+```
+
+```bash
+#!/bin/bash
+domain=$(head -c 253 | tr -d '[:space:]')
+whois "$domain" | head -40
+```
+
+That `notMatches` earns its place: `main.rs` and `package.json` look exactly
+like domains until you say they are not.
+
+The rest is the same shape with a different day job. A pod name goes to
+`kubectl describe`, a git SHA opens the commit on your host, a customer id
+opens the account in your admin panel. Select it, press one letter, read the
+answer without leaving the window.
+
 Bundle a few into a folder and you have a pack, publishable anywhere. You clone
 it into `packs/` yourself, and it loads the moment it lands.
 
