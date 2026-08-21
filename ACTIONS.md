@@ -247,6 +247,8 @@ and a script that does not declare its traffic is not caught by anything —
 so install packs the way you install plugins: from authors you trust. The panel
 asks before it installs or removes one, and says what it is about to run.
 
+![Installing a pack asks first](screenshots/pack-confirm.png)
+
 ## Command line
 
 ```bash
