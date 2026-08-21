@@ -376,9 +376,11 @@ Panel {
       }
       onReturnRequested: root.enterKey = true
       onActivateRequested: {
-        root.enterKey = false
-        if (root.pendingPack) { root.confirmPack(); return }
+        // enterKey has to survive the call: activateCursor reads it to tell Enter
+        // (open the module) from Space (toggle it).
+        if (root.pendingPack) { root.confirmPack(); root.enterKey = false; return }
         if (root.cursorActive) root.activateCursor(root.enterKey)
+        root.enterKey = false
       }
       onCloseRequested: root.pendingPack ? root.cancelPack() : root.close()
       onTabRequested: function(direction) {
