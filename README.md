@@ -6,6 +6,10 @@ terminal, a browser, an editor, a chat window.
 
 ![Blip over a JWT in a terminal](preview.png)
 
+https://github.com/user-attachments/assets/501127b1-cdcd-454e-abed-d953d2d8a6c7
+
+https://github.com/user-attachments/assets/bdec6b13-6292-4f5d-af76-d3967f6be4bc
+
 A URL gets Open and QR. A JWT gets Decode with the expiry flagged. Minified JSON
 gets Format. A file path gets Open, Edit, Reveal, Terminal here. Anything at all
 gets Search, GitHub and Ask agent, with Copy behind them.
