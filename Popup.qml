@@ -13,6 +13,8 @@ Item {
 
   property bool opened: false
   property bool keyboardActive: false
+  property bool trusted: false
+  readonly property bool adopted: trusted || keyboardActive || hover.hovered
   property var detection: null
   property var visibleActions: []
   property var overflowActions: []
@@ -59,7 +61,7 @@ Item {
   readonly property string typeLabel: detection ? String(detection.primaryLabel || "") : ""
 
   // The accelerators run unfocused too, so the badges follow those, not the focus.
-  readonly property bool keysLive: opened && (keyboardActive || mode === "actions")
+  readonly property bool keysLive: opened && (keyboardActive || (mode === "actions" && adopted))
 
   readonly property int pad: Style.spacing.popupPadding
   readonly property int gap: Style.spacing.sm
@@ -81,7 +83,8 @@ Item {
 
   readonly property var answer: detection ? Transforms.instant(detection, Date.now()) : null
 
-  function present(nextDetection, menu, x, y, focus) {
+  function present(nextDetection, menu, x, y, focus, trust) {
+    trusted = trust === true
     detection = nextDetection
     visibleActions = menu.visible
     overflowActions = menu.overflow
@@ -109,6 +112,7 @@ Item {
     entering = false
     opened = false
     keyboardActive = false
+    trusted = false
     focusPrimed = false
     busy = false
     morphEnabled = false
@@ -613,6 +617,7 @@ Item {
       Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
 
       Text {
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: root.notice === "Copied" ? "󰄬" : "󰋽"
         color: Color.accent
@@ -621,6 +626,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: root.notice
         color: root.ink
@@ -697,6 +703,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             text: root.typeLabel
             color: Color.accent
@@ -722,6 +729,7 @@ Item {
 
         Text {
           id: answerText
+          textFormat: Text.PlainText
           anchors.centerIn: parent
           text: root.answer ? root.answer.text : ""
           color: root.ink
@@ -882,6 +890,7 @@ Item {
     id: keyHint
 
     Text {
+      textFormat: Text.PlainText
       text: root.expanded
         ? "Enter runs · Tab collapses · Esc closes"
         : "Letters run · Tab for all · Esc closes"
@@ -901,6 +910,7 @@ Item {
         spacing: Style.spacing.sm
 
         Text {
+          textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           text: "󰀦"
           color: Color.urgent
@@ -909,6 +919,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           text: root.confirmNetwork
             ? (root.pendingConfirm.label + " sends this selection over the network")
@@ -921,6 +932,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         width: Math.min(implicitWidth, root.listWidth)
         text: root.confirmNetwork
           ? (root.pendingConfirm.host ? "to " + root.pendingConfirm.host : "to an undeclared host")
@@ -934,6 +946,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         text: root.confirmNetwork
           ? "Enter to allow it from now on · Esc to cancel"
           : "Enter to run · Esc to cancel"
@@ -951,6 +964,7 @@ Item {
       spacing: Style.spacing.md
 
       Text {
+        textFormat: Text.PlainText
         visible: text !== ""
         anchors.horizontalCenter: root.resultIsQr ? parent.horizontalCenter : undefined
         text: root.result ? String(root.result.title || "") : ""
@@ -974,6 +988,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         visible: !root.resultCanReplace
         anchors.horizontalCenter: root.resultIsQr ? parent.horizontalCenter : undefined
         text: root.resultIsQr ? "Enter to copy the link · Esc to close" : "Enter to copy · Esc to close"
@@ -1003,6 +1018,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           text: "← → choose · Esc closes"
           color: root.faint
