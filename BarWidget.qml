@@ -15,10 +15,11 @@ Panel {
   readonly property bool visibleIndicator: blip ? blip.showIndicator : true
   readonly property var modules: blip ? blip.modules : []
   readonly property var packs: blip ? blip.packList : []
-  property string installNote: ""
-  // A pack's scripts run as you, so nothing installs or leaves on one press.
+  property string packNote: ""
+  // A pack's scripts run as you, so nothing leaves on one press.
   property var pendingPack: null
   property double pendingPackAt: 0
+  readonly property string packsDir: "~/.config/omarchy/blip/packs"
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -85,10 +86,6 @@ Panel {
   // returnRequested precedes activateRequested only for Enter; that tells it from Space.
   property bool enterKey: false
 
-  // Leaving the tab by mouse while the install field is focused would leave
-  // the keyboard routed to a hidden editor.
-  onTabKeyChanged: if (tabKey !== "packs" && installField.activeFocus) keyCatcher.forceActiveFocus()
-
   // Each tab is its own page: the cursor lands back on the strip and the
   // scroll starts at the top, so no row stays selected off-screen.
   function setTab(next) {
@@ -124,7 +121,7 @@ Panel {
           rows.push({ kind: "chips", id: modules[m].key, module: modules[m] })
       }
     } else if (tabKey === "packs") {
-      rows.push({ kind: "packinstall", id: "install" })
+      rows.push({ kind: "packhint", id: "hint" })
       for (var p = 0; p < packs.length; p++)
         rows.push({ kind: "pack", id: packs[p].name, pack: packs[p] })
     } else if (tabKey === "tuning") {
@@ -184,8 +181,8 @@ Panel {
       else setModuleExpanded(row.id, !isModuleExpanded(row.id))
     }
     else if (row.kind === "chips") toggleChip(row.module)
-    else if (row.kind === "packinstall") installField.forceActiveFocus()
-    else if (row.kind === "pack") notePackResult(blip.packUpdate(row.id))
+    else if (row.kind === "packhint") blip.openPacksDir()
+    else if (row.kind === "pack") notePackResult(blip.openPackDir(row.id))
   }
 
   function forgetConsents() {
@@ -201,26 +198,16 @@ Panel {
     blip.setActionEnabled(id, !blip.isActionEnabled(id))
   }
 
-  // Refused operations (busy, bad url) surface here instead of vanishing.
+  // Refused operations (busy, unknown pack) surface here instead of vanishing.
   function notePackResult(result) {
-    installNote = String(result).indexOf("error:") === 0 ? String(result).slice(7).replace(/^\s+/, "") : ""
-    return installNote === ""
-  }
-
-  function askPackInstall() {
-    if (!blip || pendingPack) return
-    var check = blip.packCheck(installField.text)
-    if (check.error) { installNote = check.error; return }
-    installNote = ""
-    pendingPack = { op: "add", name: check.name, source: check.source }
-    pendingPackAt = Date.now()
-    keyCatcher.forceActiveFocus()
+    packNote = String(result).indexOf("error:") === 0 ? String(result).slice(7).replace(/^\s+/, "") : ""
+    return packNote === ""
   }
 
   function askPackRemove(name) {
     if (!blip || blip.packBusy) return
-    installNote = ""
-    pendingPack = { op: "remove", name: String(name), source: "" }
+    packNote = ""
+    pendingPack = { name: String(name) }
     pendingPackAt = Date.now()
     keyCatcher.forceActiveFocus()
   }
@@ -232,8 +219,7 @@ Panel {
     if (Date.now() - pendingPackAt < 250) return
     var pending = pendingPack
     pendingPack = null
-    if (pending.op === "remove") { notePackResult(blip.packRemove(pending.name)); return }
-    if (notePackResult(blip.packAdd(pending.source))) installField.text = ""
+    notePackResult(blip.packRemove(pending.name))
   }
 
   function cancelPack() { pendingPack = null }
@@ -368,7 +354,7 @@ Panel {
       anchors.fill: parent
       // While an inline editor or the dropdown popup owns the keys, every
       // key belongs to it.
-      blocked: installField.activeFocus || searchField.activeFocus || searchDropdown.popupOpen
+      blocked: searchField.activeFocus || searchDropdown.popupOpen
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
         if (dy !== 0) root.moveCursor(dy)
@@ -390,7 +376,7 @@ Panel {
       onDeleteRequested: {
         if (root.pendingPack) return
         var row = root.cursorRow
-        if (row && row.kind === "pack") root.askPackRemove(row.id)
+        if (row && row.kind === "pack" && row.pack && row.pack.removable !== false) root.askPackRemove(row.id)
       }
       onTextKey: function(t) {
         if (root.pendingPack) return
@@ -787,55 +773,72 @@ Panel {
               spacing: Style.space(6)
 
               CursorSurface {
-                id: installRow
+                id: hintRow
                 width: parent.width
-                hasCursor: root.cursorId === "packinstall:install" && !installField.activeFocus
+                hasCursor: root.cursorId === "packhint:hint"
                 foreground: root.foreground
-                implicitHeight: installContent.implicitHeight + Style.space(12)
+                implicitHeight: hintContent.implicitHeight + Style.space(12)
 
-                onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(installRow)
+                onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(hintRow)
 
                 MouseArea {
                   anchors.fill: parent
                   hoverEnabled: true
-                  acceptedButtons: Qt.NoButton
-                  onEntered: root.setCursorTo("packinstall", "install")
+                  onEntered: root.setCursorTo("packhint", "hint")
+                  onClicked: if (root.blip) root.blip.openPacksDir()
                 }
 
-                Row {
-                  id: installContent
+                Column {
+                  id: hintContent
                   anchors.left: parent.left
                   anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
                   anchors.leftMargin: Style.space(10)
                   anchors.rightMargin: Style.space(10)
-                  spacing: Style.space(8)
+                  spacing: Style.space(1)
 
-                  TextField {
-                    id: installField
-                    width: parent.width - installButton.implicitWidth - parent.spacing
-                    anchors.verticalCenter: parent.verticalCenter
-                    placeholderText: "https://github.com/… or ~/my-pack"
-                    foreground: root.foreground
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.bodySmall
-                    enabled: !(root.blip && root.blip.packBusy)
-                    onAccepted: root.askPackInstall()
-                    onTextChanged: root.installNote = ""
-                    Keys.onEscapePressed: keyCatcher.forceActiveFocus()
+                  Item {
+                    width: parent.width
+                    implicitHeight: Math.max(hintTitle.implicitHeight, openButton.implicitHeight)
+
+                    Text {
+                      id: hintTitle
+                      textFormat: Text.PlainText
+                      anchors.left: parent.left
+                      anchors.verticalCenter: parent.verticalCenter
+                      width: parent.width - openButton.implicitWidth - Style.space(8)
+                      text: "Add a pack"
+                      color: root.foreground
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.subtitle
+                      font.bold: true
+                      elide: Text.ElideRight
+                    }
+
+                    Button {
+                      id: openButton
+                      anchors.right: parent.right
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "Open"
+                      iconText: "󰝰"
+                      bordered: true
+                      foreground: root.foreground
+                      fontFamily: root.fontFamily
+                      fontSize: Style.font.bodySmall
+                      onClicked: if (root.blip) root.blip.openPacksDir()
+                    }
                   }
 
-                  Button {
-                    id: installButton
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Install"
-                    iconText: "󰇚"
-                    bordered: true
-                    foreground: root.foreground
-                    fontFamily: root.fontFamily
-                    fontSize: Style.font.bodySmall
-                    enabled: installField.text.length > 0 && !(root.blip && root.blip.packBusy)
-                    onClicked: root.askPackInstall()
+                  Text {
+                    textFormat: Text.PlainText
+                    width: parent.width
+                    text: "Drop a folder in " + root.packsDir + "; no restart"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    wrapMode: Text.WrapAnywhere
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
                   }
                 }
               }
@@ -843,8 +846,6 @@ Panel {
               BorderSurface {
                 id: packConfirm
 
-                readonly property bool removing: root.pendingPack !== null
-                  && String(root.pendingPack.op) === "remove"
                 readonly property string packName: root.pendingPack
                   ? String(root.pendingPack.name) : ""
 
@@ -867,7 +868,7 @@ Panel {
                   Text {
                     textFormat: Text.PlainText
                     width: parent.width
-                    text: (packConfirm.removing ? "Remove " : "Install ") + packConfirm.packName + "?"
+                    text: "Remove " + packConfirm.packName + "?"
                     color: root.urgent
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.bodySmall
@@ -878,24 +879,11 @@ Panel {
                   Text {
                     textFormat: Text.PlainText
                     width: parent.width
-                    text: packConfirm.removing
-                      ? "Its actions go with it. Anything you wrote under your own actions folder stays."
-                      : "Its actions and scripts run as you, with your files and your network. Blip does not review them and takes no responsibility for what they do. Read the source first."
+                    text: "Its actions go with it. Anything you wrote under your own actions folder stays."
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
                     wrapMode: Text.WordWrap
-                  }
-
-                  Text {
-                    textFormat: Text.PlainText
-                    visible: !packConfirm.removing && text !== ""
-                    width: parent.width
-                    text: root.pendingPack ? String(root.pendingPack.source) : ""
-                    color: root.foreground
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
-                    elide: Text.ElideMiddle
                   }
 
                   Item {
@@ -927,8 +915,8 @@ Panel {
                       }
 
                       Button {
-                        text: packConfirm.removing ? "Remove" : "Install"
-                        iconText: packConfirm.removing ? "󰩹" : "󰇚"
+                        text: "Remove"
+                        iconText: "󰩹"
                         bordered: true
                         foreground: root.urgent
                         fontFamily: root.fontFamily
@@ -946,9 +934,9 @@ Panel {
                 width: parent.width
                 // A running operation outranks a stale validation note.
                 text: root.blip && root.blip.packBusy ? root.blip.packStatus
-                  : (root.installNote !== "" ? root.installNote : (root.blip ? root.blip.packStatus : ""))
+                  : (root.packNote !== "" ? root.packNote : (root.blip ? root.blip.packStatus : ""))
                 color: (root.blip && root.blip.packBusy) ? root.dim
-                  : (root.installNote !== "" || (root.blip && root.blip.packStatusUrgent) ? root.urgent : root.dim)
+                  : (root.packNote !== "" || (root.blip && root.blip.packStatusUrgent) ? root.urgent : root.dim)
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 wrapMode: Text.WrapAnywhere
@@ -960,8 +948,8 @@ Panel {
                 textFormat: Text.PlainText
                 visible: root.packs.length === 0
                 width: parent.width
-                text: "A pack is a git repo with actions/*.jsonc and scripts/. "
-                  + "A local clone installs the same way, which is how you write one."
+                text: "A pack is a folder with actions/*.jsonc and scripts/, laid out like your own. "
+                  + "Its scripts run as you, so read one before you add it."
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1447,6 +1435,7 @@ Panel {
 
     property var pack: null
     readonly property string packName: pack ? String(pack.name) : ""
+    readonly property bool removable: !pack || pack.removable !== false
 
     hasCursor: root.cursorId === "pack:" + packName
     foreground: root.foreground
@@ -1480,7 +1469,7 @@ Panel {
       }
 
       Column {
-        width: parent.width - Style.font.icon - updateButton.width - removeButton.width - parent.spacing * 3
+        width: parent.width - Style.font.icon - removeButton.width - parent.spacing * 2
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(1)
 
@@ -1500,7 +1489,8 @@ Panel {
           width: parent.width
           text: (packRow.pack ? packRow.pack.actions : 0)
             + (packRow.pack && packRow.pack.actions === 1 ? " action" : " actions")
-            + " · Enter updates · x removes"
+            + (packRow.removable ? " · Enter opens the folder · x removes"
+              : " · Enter opens the folder")
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -1509,24 +1499,13 @@ Panel {
       }
 
       PanelActionButton {
-        id: updateButton
-        anchors.verticalCenter: parent.verticalCenter
-        iconText: "󰑐"
-        tooltipText: "git pull this pack"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        enabled: !(root.blip && root.blip.packBusy)
-        onClicked: if (root.blip) root.notePackResult(root.blip.packUpdate(packRow.packName))
-      }
-
-      PanelActionButton {
         id: removeButton
         anchors.verticalCenter: parent.verticalCenter
         iconText: "󰩺"
-        tooltipText: "Remove this pack"
+        tooltipText: packRow.removable ? "Remove this pack" : "Rename the folder to remove it from here"
         foreground: root.foreground
         fontFamily: root.fontFamily
-        enabled: !(root.blip && root.blip.packBusy)
+        enabled: packRow.removable && !(root.blip && root.blip.packBusy)
         onClicked: root.askPackRemove(packRow.packName)
       }
     }

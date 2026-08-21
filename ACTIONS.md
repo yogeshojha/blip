@@ -7,7 +7,7 @@ same format, same directory layout, and yours can shadow or remove them.
 |---|---|
 | `~/.config/omarchy/blip/actions/` | your actions |
 | `~/.config/omarchy/blip/scripts/` | scripts they call |
-| `~/.config/omarchy/blip/packs/<name>/` | a pack, with the same two directories |
+| `~/.config/omarchy/blip/packs/<name>/` | a pack you put there, same two directories |
 
 The directory is watched. Saving a file is all it takes; no restart.
 
@@ -216,38 +216,40 @@ Remove one outright:
 { "id": "blip.run", "disabled": true }
 ```
 
-Precedence is built-in, then pack, then user.
+Precedence is built-in, then pack, then user, with one limit: a pack cannot
+override or disable a built-in id. Only your own files can.
 
 ## Action packs
 
-A pack is a git repository with the same `actions/` and `scripts/` layout as
-`~/.config/omarchy/blip/`. Publishing one is pushing that repo anywhere
-public; name it `blip-pack-<something>` and the prefix is stripped on
-install.
+A pack is a folder under `~/.config/omarchy/blip/packs/` with the same
+`actions/` and `scripts/` layout as `~/.config/omarchy/blip/` itself. Publishing
+one is pushing that folder anywhere public.
 
-Installing is one line, or none — the panel's Packs fold takes a pasted
-URL, and every installed pack lists there with an update and a remove button:
+Blip reads whatever folders are under `packs/`; a new one loads the moment it
+lands, no restart. You clone it there yourself:
 
 ```bash
-omarchy-shell blip packAdd https://github.com/someone/blip-pack-devtools
+git clone https://github.com/someone/blip-pack-devtools ~/.config/omarchy/blip/packs/devtools
+```
+
+A pack's scripts run as you, with your files and your network. Read the repo
+first. Writing one works the same way: edit `packs/<name>/` in place and it
+reloads on save.
+
+The panel's Packs fold lists what is installed with action counts, opens `packs/`
+— or one pack's folder — on `Enter`, and removes one on `x` after asking:
+
+```bash
 omarchy-shell blip packs                # what is installed, with action counts
-omarchy-shell blip packUpdate devtools  # git pull --ff-only
 omarchy-shell blip packRemove devtools
 ```
 
-`packAdd` also takes a local path, `~` and all, which is how you develop one.
-It has to be a git repository — `git init` in the folder is enough.
-New actions appear the moment the clone lands — no restart.
-
-What a pack can and cannot do: its actions rank below your own files, so
-anything you define with the same id wins; a *declared* network action stays
-hidden until network actions are allowed, and the first send still asks,
-naming the host. But a pack's scripts run as you when you click their action,
-and a script that does not declare its traffic is not caught by anything —
-so install packs the way you install plugins: from authors you trust. The panel
-asks before it installs or removes one, and says what it is about to run.
-
-![Installing a pack asks first](screenshots/pack-confirm.png)
+What a pack can and cannot do: it may add ids, but it can never take over or
+switch off one that ships with Blip. Your own files outrank a pack, so anything
+you define with the same id wins. A *declared* network action stays hidden until
+network actions are allowed, and the first send still asks, naming the host. But
+a script that does not declare its traffic is not caught by anything — so add
+packs the way you install plugins: from authors you trust.
 
 ## Command line
 
@@ -258,5 +260,5 @@ omarchy-shell blip detect "x"   # what Blip makes of a selection, popup-free
 omarchy-shell blip disable <id> # the same toggle the panel's chips flip
 omarchy-shell blip enable <id>
 omarchy-shell blip set allowNetwork true   # any setting the manifest declares
-omarchy-shell blip packAdd <url>           # and packs, packUpdate, packRemove
+omarchy-shell blip packs                   # installed packs, and packRemove <name>
 ```
