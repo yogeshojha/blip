@@ -164,8 +164,9 @@ since argv never reaches a shell that would do it.
 
 `${search}` is the search engine chosen in the control panel, with the selection
 already in it. It backs `blip.search` only. `blip.search.github` carries its own
-url, so override that id if you want repos or issues rather than code. Picking Custom there takes a url of your own, where `%s` marks the
-spot the selection goes:
+url, so override that id if you want repos or issues rather than code. Picking
+Custom there takes a url of your own, where `%s` marks the spot the selection
+goes:
 
 ```
 https://github.com/search?q=%s&type=code
@@ -234,7 +235,8 @@ omarchy-shell blip packUpdate devtools  # git pull --ff-only
 omarchy-shell blip packRemove devtools
 ```
 
-`packAdd` also takes an absolute local path, which is how you develop one.
+`packAdd` also takes a local path, `~` and all, which is how you develop one.
+It has to be a git repository — `git init` in the folder is enough.
 New actions appear the moment the clone lands — no restart.
 
 What a pack can and cannot do: its actions rank below your own files, so
@@ -242,7 +244,10 @@ anything you define with the same id wins; a *declared* network action stays
 hidden until network actions are allowed, and the first send still asks,
 naming the host. But a pack's scripts run as you when you click their action,
 and a script that does not declare its traffic is not caught by anything —
-so install packs the way you install plugins: from authors you trust.
+so install packs the way you install plugins: from authors you trust. The panel
+asks before it installs or removes one, and says what it is about to run.
+
+![Installing a pack asks first](screenshots/pack-confirm.png)
 
 ## Command line
 

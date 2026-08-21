@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import qs.Commons
 import "Detect.js" as Detect
@@ -12,7 +13,7 @@ Item {
   property var shell: null
   property var manifest: null
 
-  readonly property string pluginId: "yogeshojha.blip"
+  readonly property string pluginId: "io.github.yogeshojha.blip"
   readonly property string home: Quickshell.env("HOME")
   readonly property string pluginDir: manifest && manifest.__sourceDir ? String(manifest.__sourceDir) : ""
   readonly property string userDir: home + "/.config/omarchy/blip"
@@ -95,6 +96,8 @@ Item {
   readonly property int maxActions: Math.max(1, Number(setting("maxActions")) || 6)
   readonly property int debounceMs: Math.max(0, Number(setting("debounceMs")) || 0)
   readonly property int dwellMs: Math.max(1, Number(setting("dwellSeconds")) || 4) * 1000
+  // A word the app selects on its way to its own menu must not raise the bar.
+  readonly property int contextMenuMs: 700
   readonly property var blocklist: {
     var raw = String(setting("blockedApps") || "").split(",")
     var out = []
@@ -142,6 +145,7 @@ Item {
   property bool sharing: false
   property bool skipFirstEvent: true
   property var pending: null
+  property double suppressUntil: 0
 
   property var fileEntries: []
   property var runtimeEntries: []
@@ -189,22 +193,33 @@ Item {
     return false
   }
 
-  function packAdd(source) {
-    var src = String(source || "").replace(/^\s+|\s+$/g, "")
-    if (packBusy) return "error: another pack operation is running"
-    if (!Actions.isPackSource(src)) return "error: packs install from an https:// git url or an absolute local path"
+  // The panel asks before it installs, so it needs the name and any objection first.
+  function packCheck(source) {
+    var src = Actions.expandHome(String(source || "").replace(/^\s+|\s+$/g, ""), home)
+    if (packBusy) return { error: "another pack operation is running" }
+    if (!Actions.isPackSource(src)) return { error: "packs install from an https:// git url or an absolute local path" }
     var name = Actions.packNameFromSource(src)
-    if (!name) return "error: cannot derive a pack name from '" + src + "'"
-    if (hasPack(name)) return "error: pack '" + name + "' is already installed"
+    if (!name) return { error: "cannot derive a pack name from '" + src + "'" }
+    if (hasPack(name)) return { error: "pack '" + name + "' is already installed" }
+    return { error: "", name: name, source: src }
+  }
+
+  function packAdd(source) {
+    var check = packCheck(source)
+    if (check.error) return "error: " + check.error
     // Staged in a dot-prefixed dir the scanner skips, moved into place in
     // one step, so the catalog never sees half a pack.
-    var dest = userDir + "/packs/" + name
-    var staging = userDir + "/packs/.staging-" + name
-    runPack("add", name, ["bash", "-c",
+    var dest = userDir + "/packs/" + check.name
+    var staging = userDir + "/packs/.staging-" + check.name
+    runPack("add", check.name, ["bash", "-c",
       'set -e; [ ! -e "$2" ] || { echo "a pack named $(basename -- "$2") is already installed" >&2; exit 1; }; '
+      // git calls a plain directory a repository that does not exist, which reads
+      // as a missing folder when the folder is right there.
+      + 'case "$0" in /*) [ -d "$0" ] || { echo "no such folder: $0" >&2; exit 1; }; '
+      + '[ -d "$0/.git" ] || { echo "$0 is not a git repository - run git init there" >&2; exit 1; };; esac; '
       + 'rm -rf -- "$1"; git clone --depth 1 -- "$0" "$1"; mv -T -- "$1" "$2"',
-      src, staging, dest])
-    return "installing " + name
+      check.source, staging, dest])
+    return "installing " + check.name
   }
 
   function packUpdate(name) {
@@ -324,6 +339,8 @@ Item {
   function present(text, focus) {
     if (!armed) return "disarmed"
     if (suppressed) return "sharing"
+    // A context menu is up; only the keybind, which is deliberate, still gets through.
+    if (focus !== true && Date.now() < suppressUntil) return "context menu"
     var value = String(text || "")
     if (value.replace(/^\s+|\s+$/g, "").length < minLength) return "too short"
     if (value.length > maxLength) return "too long"
@@ -403,6 +420,7 @@ Item {
     watcher.running = armed
     // A crash skips onDestruction, so sweep the consuming set at startup too.
     passiveKeys.sweep()
+    pointerGuard.apply()
   }
 
   readonly property string sharingScript: ""
@@ -614,7 +632,15 @@ Item {
 
     // A result binds no filler: a stray key must not wipe out what is being read.
     function keyPlan() {
-      if (popup.mode === "result") return { consume: ["Return", "c"], filler: false }
+      // Read the result itself: a sibling binding has not always caught up
+      // by the time the mode change reaches this handler.
+      var shown = popup.result
+      if (shown) {
+        var picks = ["Return", "c"]
+        // Only a replaceable result has two choices to move between.
+        if (shown.replace === true) picks = picks.concat(["r", "Left", "Right", "Tab"])
+        return { consume: picks, filler: false }
+      }
       if (popup.mode === "confirm") return { consume: ["Return"], filler: false }
 
       var consume = []
@@ -650,6 +676,12 @@ Item {
       // Escape also reaches the window, which clears the selection behind it.
       lua.push(bindLine("Escape", "omarchy-shell blip key escape", true))
       next.push("Escape")
+      // A press away from the card is the user moving on; the bar must not outlive it.
+      var buttons = { "mouse:272": "left", "mouse:274": "middle" }
+      for (var button in buttons) {
+        lua.push(bindLine(button, "omarchy-shell blip click " + buttons[button], true))
+        next.push(button)
+      }
       for (var j = 0; j < plan.consume.length; j++) {
         lua.push(bindLine(plan.consume[j], "omarchy-shell blip key " + plan.consume[j], false))
         next.push(plan.consume[j])
@@ -683,7 +715,7 @@ Item {
     // Only what can be bound consuming: a leak there eats the key system wide.
     function sweep() {
       var lua = []
-      var extra = ["equal", "Tab", "Return", "Left", "Right"]
+      var extra = ["equal", "Tab", "Return", "Left", "Right", "mouse:272", "mouse:274"]
       for (var i = 0; i < filler.length; i++) {
         if (filler[i].length !== 1) continue
         lua.push('hl.unbind("' + filler[i] + '")')
@@ -699,6 +731,38 @@ Item {
     }
   }
 
+  // Bound whenever the bar can appear, not only while it is up: an app that selects
+  // the word under the pointer on right-click would raise the bar onto its own menu.
+  QtObject {
+    id: pointerGuard
+
+    readonly property bool wanted: service.armed
+
+    // Unbind first: a crash leaves the bind behind, and the sweep misses it.
+    function apply() {
+      var lua = ['hl.unbind("mouse:273")']
+      if (wanted) lua.push(passiveKeys.bindLine("mouse:273", "omarchy-shell blip click right", true))
+      passiveKeys.dispatch(lua)
+    }
+
+    function clear() {
+      passiveKeys.dispatch(['hl.unbind("mouse:273")'])
+    }
+
+    onWantedChanged: apply()
+  }
+
+  // A config reload drops every bind written through eval. The popup's set comes
+  // back on its next open; this one is written once.
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (!event || String(event.name) !== "configreloaded") return
+      passiveKeys.apply()
+      pointerGuard.apply()
+    }
+  }
+
   Connections {
     target: popup
     function onOpenedChanged() {
@@ -711,7 +775,10 @@ Item {
     function onNavigatedChanged() { passiveKeys.apply() }
   }
 
-  Component.onDestruction: passiveKeys.clear()
+  Component.onDestruction: {
+    passiveKeys.clear()
+    pointerGuard.clear()
+  }
 
   IpcHandler {
     target: "blip"
@@ -733,12 +800,17 @@ Item {
       var value = String(name || "")
       if (value === "escape" || value === "Escape") { popup.back(); return "back" }
       if (value === "Return") return popup.pressReturn() ? "ran" : "ignored"
-      if (value === "Tab") return popup.pressTab() ? "expanded" : "ignored"
+      if (value === "Tab") {
+        if (!popup.pressTab()) return "ignored"
+        return popup.result ? "moved" : "expanded"
+      }
       if (value === "Left" || value === "Up") return popup.pressMove(-1) ? "moved" : "ignored"
       if (value === "Right" || value === "Down") return popup.pressMove(1) ? "moved" : "ignored"
       if (value === "equal") return popup.pressAnswer() ? "copied" : "ignored"
       if (value === "c" && popup.mode === "result")
         return popup.copyResult() ? "copied" : "ignored"
+      if (value === "r" && popup.mode === "result")
+        return popup.replaceResult() ? "replaced" : "ignored"
       if (value.length === 1
           && (popup.activateByKey(value) || popup.activateByKey(value.toUpperCase())))
         return "ran"
@@ -749,6 +821,18 @@ Item {
     }
 
     function dismiss(): string { popup.close(); return "ok" }
+
+    // Routed here by the mouse binds; none of them consume the click.
+    function click(button: string): string {
+      var name = String(button || "")
+      if (name === "right") {
+        service.suppressUntil = Date.now() + service.contextMenuMs
+        debounce.stop()
+        service.pending = null
+      }
+      if (!popup.opened) return "closed"
+      return popup.pressPointer(name) ? "dismissed" : "ignored"
+    }
 
     function arm(): string { service.setArmed(true); return "armed" }
     function disarm(): string { service.setArmed(false); return "disarmed" }
@@ -765,6 +849,7 @@ Item {
         sharing: service.sharing,
         open: popup.opened,
         keyboard: popup.keyboardActive,
+        choice: popup.resultChoosing ? popup.resultIndex : -1,
         bound: passiveKeys.bound.length,
         cursor: [popup.cursorX, popup.cursorY],
         search: service.searchTemplate,

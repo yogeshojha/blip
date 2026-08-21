@@ -22,6 +22,10 @@ the file it was minified in, decoded base64 lands where the blob was. `c`
 copies instead, `Esc` walks away, and the result is on the clipboard either
 way, so a window that cannot take the paste costs you nothing.
 
+Blip is not just an extension for Omarchy. It is an ecosystem of its own. Every
+action on the bar is a small file, the ones that ship are written exactly the way
+yours would be, and anyone can build their own and share them.
+
 ## Install
 
 ```bash
@@ -42,7 +46,9 @@ the keyboard if it is already up, closes it if it already has the keyboard.
 
 Select something. The bar fades in just above the pointer, flips below it when
 there is no room, and never takes focus. Move the pointer well away and it
-closes; leave it alone and it fades after a few seconds.
+closes; leave it alone and it fades after a few seconds. Click elsewhere and it
+closes. Right-click and it is gone before the app's own menu is up — the click
+passes straight through to the app.
 
 | Key | |
 |---|---|
@@ -95,6 +101,10 @@ lowercase word that happens to decode is not base64.
 
 ## Add your own
 
+Blip's own actions get no special treatment. They are JSONC files in the same
+format, read from the same kind of folder, and anything you write beats them.
+Reuse an id to replace one, or switch it off entirely.
+
 Drop a `.jsonc` in `~/.config/omarchy/blip/actions/`. No code, no restart.
 
 ```jsonc
@@ -107,9 +117,21 @@ Drop a `.jsonc` in `~/.config/omarchy/blip/actions/`. No code, no restart.
 }
 ```
 
-An action can also pipe the selection through a script, call another plugin
-over IPC, ship as a pack, or replace one of Blip's own. **[ACTIONS.md](ACTIONS.md)**
-is the full reference.
+An action can open a url, run a script over the selection, or call another
+plugin over IPC and show whatever comes back.
+
+Bundle a few into a git repository and you have a pack. Anyone can install it in
+one line:
+
+```bash
+omarchy-shell blip packAdd https://github.com/…/blip-pack-…
+```
+
+A pack can teach Blip to spot things it has never heard of. A regex is enough to
+turn a bare hostname, a ticket id or an order number into something the bar
+answers.
+
+**[ACTIONS.md](ACTIONS.md)** is the full reference.
 
 ## Search
 
@@ -136,7 +158,8 @@ behaviour toggles, the search engine, and a row per module. A module opens into
 a grid of chips — the same chips the bar shows — and clicking one turns that
 action off or on, so you can drop the text tools, or just `Run`, without
 touching a file; the module's switch, or `Space`, flips them all at once. Packs
-install from a pasted git URL and update or remove from the same fold — see
+install from a pasted git URL and update or remove from the same fold, and
+installing or removing one asks first — see
 [ACTIONS.md](ACTIONS.md#action-packs) — and the sliders sit folded under
 *Fine-tuning*, values readable on the closed row. `↑↓` move, `←→` fold and
 unfold, `Enter` selects. Right-click the icon to arm and disarm without opening
@@ -146,6 +169,15 @@ too: `omarchy-shell blip-panel toggle`.
 `Setup > Plugins > Blip` holds the same settings. Hide the icon with the *Show
 the bar icon* setting rather than by removing the widget from the bar: the
 entry in `shell.json` is what keeps the plugin enabled.
+
+## Remove
+
+```bash
+omarchy plugin remove io.github.yogeshojha.blip
+```
+
+That takes the plugin and its bar entry. Your actions and what you allowed live
+in `~/.config/omarchy/blip/`; delete that too if you want nothing left behind.
 
 ## Privacy
 
@@ -162,6 +194,10 @@ entry in `shell.json` is what keeps the plugin enabled.
 - Password managers are skipped by window class and title, and so is any
   selection a client marks sensitive.
 - Screen sharing disarms Blip. No bar appears over a recording or a call.
+- Blip binds keys in Hyprland while the bar is up, so an unfocused surface can
+  still hear them, and right-click for as long as it is armed. Every bind passes
+  the press through to the window underneath, and all of them go when you
+  disarm, disable, or remove Blip.
 
 ## Development
 
@@ -178,7 +214,7 @@ omarchy plugin validate .
 To run a working copy:
 
 ```bash
-rsync -a --delete --exclude .git --exclude test . ~/.config/omarchy/plugins/yogeshojha.blip/
+rsync -a --delete --exclude .git --exclude test . ~/.config/omarchy/plugins/io.github.yogeshojha.blip/
 omarchy-restart-shell
 ```
 

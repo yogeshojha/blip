@@ -31,6 +31,15 @@ Item {
   property bool focusPrimed: false
   property bool morphEnabled: false
 
+  // Moved forward on every change a click could be racing; see pressPointer.
+  property double quietUntil: 0
+  readonly property int settleMs: 350
+
+  // Set before opened changes: the animations read it as they start, and a
+  // binding on opened alone has not always caught up by then.
+  property bool entering: false
+  readonly property int exitMs: 130
+
   signal runRequested(var action)
   signal copyRequested(string text)
   signal replaceRequested(string text)
@@ -43,6 +52,10 @@ Item {
   readonly property bool resultIsQr: !!result && result.render === "qr"
   readonly property bool resultCanReplace: !!result && result.replace === true
   readonly property bool confirmNetwork: !!pendingConfirm && pendingConfirm.needsConsent === true
+
+  // Replace and Copy sit side by side in a result; 0 is Replace, 1 is Copy.
+  property int resultIndex: 0
+  readonly property bool resultChoosing: mode === "result" && resultCanReplace
   readonly property string typeLabel: detection ? String(detection.primaryLabel || "") : ""
 
   // The accelerators run unfocused too, so the badges follow those, not the focus.
@@ -50,7 +63,7 @@ Item {
 
   readonly property int pad: Style.spacing.popupPadding
   readonly property int gap: Style.spacing.sm
-  readonly property int chipHeight: Math.max(Style.space(28), Style.font.body + Style.spacing.controlPaddingY * 2)
+  readonly property int chipHeight: Math.max(Style.spacing.controlHeight, Style.font.body + Style.spacing.controlPaddingY * 2)
   readonly property int cursorGap: Style.space(18)
   readonly property int edgeGap: Math.max(Style.gapsOut, Style.space(6))
   readonly property int listWidth: Style.space(380)
@@ -79,17 +92,21 @@ Item {
     expanded = false
     listWidthFloor = 0
     result = null
+    resultIndex = 0
     pendingConfirm = null
     notice = ""
     busy = false
     morphEnabled = false
     morphTimer.restart()
+    quietUntil = Date.now() + settleMs
+    entering = true
     opened = true
     setKeyboard(focus === true)
   }
 
   function close() {
     if (!opened) return
+    entering = false
     opened = false
     keyboardActive = false
     focusPrimed = false
@@ -131,6 +148,7 @@ Item {
   }
 
   function activate() {
+    quietUntil = Date.now() + settleMs
     if (moreSelected) { setExpanded(true); return }
     var action = rows[index]
     if (!action || busy) return
@@ -165,8 +183,10 @@ Item {
   }
 
   function showResult(payload) {
+    quietUntil = Date.now() + settleMs
     busy = false
     replaced = false
+    resultIndex = 0
     result = payload
     holdKeyboard()
   }
@@ -177,10 +197,17 @@ Item {
     else restartDwell()
   }
 
+  function moveResult(delta) {
+    if (!resultChoosing) return false
+    resultIndex = (resultIndex + delta + 2) % 2
+    return true
+  }
+
   // Routed in from the service's binds; each mirrors a branch of the focused handler.
   function pressReturn() {
     if (result) {
-      if (!replaceResult()) copyRequested(result.copy)
+      if (resultChoosing && resultIndex === 1) copyRequested(result.copy)
+      else if (!replaceResult()) copyRequested(result.copy)
       return true
     }
     activate()
@@ -197,6 +224,7 @@ Item {
   }
 
   function pressTab() {
+    if (result) return moveResult(1)
     if (!hasOverflow) return false
     navigated = true
     setExpanded(!expanded)
@@ -205,7 +233,8 @@ Item {
 
   // Left and right only: up and down stay dismiss keys, so history and scroll survive.
   function pressMove(delta) {
-    if (result || pendingConfirm || !rows.length) return false
+    if (result) return moveResult(delta)
+    if (pendingConfirm || !rows.length) return false
     move(delta)
     navigated = true
     return true
@@ -217,6 +246,18 @@ Item {
     return true
   }
 
+  // Routed in from the service's mouse binds: outside the card the bar has no input.
+  function pressPointer(button) {
+    if (!opened) return false
+    // A context menu is on its way up and the bar, on the overlay layer, covers it.
+    if (button === "right") { close(); return true }
+    if (hover.hovered) return false
+    // Clicks widen a selection press by press: the second must not close the first.
+    if (Date.now() < quietUntil) return false
+    close()
+    return true
+  }
+
   function copyResult() {
     if (!result) return false
     copyRequested(result.copy)
@@ -225,6 +266,7 @@ Item {
 
   // Also drops the result: Enter during the notice must not fire a replace.
   function flash(message) {
+    quietUntil = Date.now() + settleMs
     busy = false
     result = null
     notice = message
@@ -376,7 +418,17 @@ Item {
           return
         }
         if (root.result) {
-          if (event.text === "c") { root.copyResult(); event.accepted = true }
+          if (event.key === Qt.Key_Left || event.key === Qt.Key_Up) {
+            if (root.moveResult(-1)) event.accepted = true
+            return
+          }
+          if (event.key === Qt.Key_Right || event.key === Qt.Key_Down
+              || event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+            if (root.moveResult(1)) event.accepted = true
+            return
+          }
+          if (event.text === "c") { root.copyResult(); event.accepted = true; return }
+          if (event.text === "r" && root.replaceResult()) event.accepted = true
           return
         }
         if (root.pendingConfirm) return
@@ -416,11 +468,28 @@ Item {
       transform: Translate {
         y: root.opened ? 0 : (root.placeAbove ? Style.space(6) : -Style.space(6))
 
-        Behavior on y { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+        Behavior on y {
+          NumberAnimation {
+            duration: root.entering ? 200 : root.exitMs
+            easing.type: root.entering ? Easing.OutCubic : Easing.InOutQuad
+          }
+        }
       }
 
-      Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-      Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.4 } }
+      // Linear out: an eased fade is mostly over in 40ms, and reads as a blink.
+      Behavior on opacity {
+        NumberAnimation {
+          duration: root.entering ? 150 : root.exitMs
+          easing.type: root.entering ? Easing.OutCubic : Easing.Linear
+        }
+      }
+      Behavior on scale {
+        NumberAnimation {
+          duration: root.entering ? 260 : root.exitMs
+          easing.type: root.entering ? Easing.OutBack : Easing.InOutQuad
+          easing.overshoot: 1.4
+        }
+      }
 
       // Only the size animates: x and y derive from it and track in sync.
       Behavior on width { enabled: root.morphEnabled; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
@@ -602,7 +671,7 @@ Item {
         Rectangle {
           id: badge
         visible: root.typeLabel !== ""
-        width: badgeContent.implicitWidth + Style.spacing.md * 2
+        width: badgeContent.implicitWidth + Style.spacing.controlPaddingX * 2
         height: root.chipHeight
         radius: Style.cornerRadius > 0 ? height / 2 : 0
         color: Util.alpha(Color.accent, 0.14)
@@ -641,7 +710,7 @@ Item {
       BorderSurface {
         id: answerPill
         visible: root.answer !== null
-        width: answerText.implicitWidth + Style.spacing.md * 2
+        width: answerText.implicitWidth + Style.spacing.controlPaddingX * 2
         height: root.chipHeight
         radius: Style.cornerRadius > 0 ? height / 2 : 0
         color: Util.alpha(root.ink, 0.05)
@@ -918,21 +987,24 @@ Item {
         spacing: Style.spacing.sm
 
         Chip {
-          action: ({ label: "Replace", accelerator: "⏎" })
-          selected: true
+          action: ({ label: "Replace", accelerator: root.resultIndex === 0 ? "⏎" : "r" })
+          selected: root.resultIndex === 0
           showKey: true
-          onClicked: root.replaceResult()
+          onClicked: { root.resultIndex = 0; root.replaceResult() }
+          onHovered: root.resultIndex = 0
         }
 
         Chip {
-          action: ({ label: "Copy", accelerator: "c" })
+          action: ({ label: "Copy", accelerator: root.resultIndex === 1 ? "⏎" : "c" })
+          selected: root.resultIndex === 1
           showKey: true
-          onClicked: root.copyResult()
+          onClicked: { root.resultIndex = 1; root.copyResult() }
+          onHovered: root.resultIndex = 1
         }
 
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: "Esc closes"
+          text: "← → choose · Esc closes"
           color: root.faint
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
