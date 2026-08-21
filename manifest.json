@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "Yogesh Ojha",
   "license": "MIT",
-  "description": "Select text anywhere and Blip offers the actions that fit it. A selection-action layer for Omarchy.",
+  "description": "Selection-aware actions for Omarchy: decode, format, convert, paste back.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Blip",
-    "description": "Select text anywhere and a themed bar appears with the actions that fit it. Click the icon for the control panel.",
+    "description": "Selection-aware actions: decode, format, convert, paste back. Click the icon for the control panel.",
     "category": "Productivity",
     "aliases": [
       "blip",
