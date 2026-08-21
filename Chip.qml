@@ -27,7 +27,7 @@ Item {
   readonly property color faint: Util.alpha(ink, 0.45)
 
   implicitWidth: body.implicitWidth + Style.spacing.controlPaddingX * 2
-  implicitHeight: Math.max(Style.space(28), Style.font.body + Style.spacing.controlPaddingY * 2)
+  implicitHeight: Math.max(Style.spacing.controlHeight, Style.font.body + Style.spacing.controlPaddingY * 2)
 
   Item {
     id: inner

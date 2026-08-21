@@ -43,6 +43,10 @@ Item {
   readonly property bool resultIsQr: !!result && result.render === "qr"
   readonly property bool resultCanReplace: !!result && result.replace === true
   readonly property bool confirmNetwork: !!pendingConfirm && pendingConfirm.needsConsent === true
+
+  // Replace and Copy sit side by side in a result; 0 is Replace, 1 is Copy.
+  property int resultIndex: 0
+  readonly property bool resultChoosing: mode === "result" && resultCanReplace
   readonly property string typeLabel: detection ? String(detection.primaryLabel || "") : ""
 
   // The accelerators run unfocused too, so the badges follow those, not the focus.
@@ -50,7 +54,7 @@ Item {
 
   readonly property int pad: Style.spacing.popupPadding
   readonly property int gap: Style.spacing.sm
-  readonly property int chipHeight: Math.max(Style.space(28), Style.font.body + Style.spacing.controlPaddingY * 2)
+  readonly property int chipHeight: Math.max(Style.spacing.controlHeight, Style.font.body + Style.spacing.controlPaddingY * 2)
   readonly property int cursorGap: Style.space(18)
   readonly property int edgeGap: Math.max(Style.gapsOut, Style.space(6))
   readonly property int listWidth: Style.space(380)
@@ -79,6 +83,7 @@ Item {
     expanded = false
     listWidthFloor = 0
     result = null
+    resultIndex = 0
     pendingConfirm = null
     notice = ""
     busy = false
@@ -167,6 +172,7 @@ Item {
   function showResult(payload) {
     busy = false
     replaced = false
+    resultIndex = 0
     result = payload
     holdKeyboard()
   }
@@ -177,10 +183,17 @@ Item {
     else restartDwell()
   }
 
+  function moveResult(delta) {
+    if (!resultChoosing) return false
+    resultIndex = (resultIndex + delta + 2) % 2
+    return true
+  }
+
   // Routed in from the service's binds; each mirrors a branch of the focused handler.
   function pressReturn() {
     if (result) {
-      if (!replaceResult()) copyRequested(result.copy)
+      if (resultChoosing && resultIndex === 1) copyRequested(result.copy)
+      else if (!replaceResult()) copyRequested(result.copy)
       return true
     }
     activate()
@@ -197,6 +210,7 @@ Item {
   }
 
   function pressTab() {
+    if (result) return moveResult(1)
     if (!hasOverflow) return false
     navigated = true
     setExpanded(!expanded)
@@ -205,7 +219,8 @@ Item {
 
   // Left and right only: up and down stay dismiss keys, so history and scroll survive.
   function pressMove(delta) {
-    if (result || pendingConfirm || !rows.length) return false
+    if (result) return moveResult(delta)
+    if (pendingConfirm || !rows.length) return false
     move(delta)
     navigated = true
     return true
@@ -376,7 +391,17 @@ Item {
           return
         }
         if (root.result) {
-          if (event.text === "c") { root.copyResult(); event.accepted = true }
+          if (event.key === Qt.Key_Left || event.key === Qt.Key_Up) {
+            if (root.moveResult(-1)) event.accepted = true
+            return
+          }
+          if (event.key === Qt.Key_Right || event.key === Qt.Key_Down
+              || event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+            if (root.moveResult(1)) event.accepted = true
+            return
+          }
+          if (event.text === "c") { root.copyResult(); event.accepted = true; return }
+          if (event.text === "r" && root.replaceResult()) event.accepted = true
           return
         }
         if (root.pendingConfirm) return
@@ -602,7 +627,7 @@ Item {
         Rectangle {
           id: badge
         visible: root.typeLabel !== ""
-        width: badgeContent.implicitWidth + Style.spacing.md * 2
+        width: badgeContent.implicitWidth + Style.spacing.controlPaddingX * 2
         height: root.chipHeight
         radius: Style.cornerRadius > 0 ? height / 2 : 0
         color: Util.alpha(Color.accent, 0.14)
@@ -641,7 +666,7 @@ Item {
       BorderSurface {
         id: answerPill
         visible: root.answer !== null
-        width: answerText.implicitWidth + Style.spacing.md * 2
+        width: answerText.implicitWidth + Style.spacing.controlPaddingX * 2
         height: root.chipHeight
         radius: Style.cornerRadius > 0 ? height / 2 : 0
         color: Util.alpha(root.ink, 0.05)
@@ -918,21 +943,24 @@ Item {
         spacing: Style.spacing.sm
 
         Chip {
-          action: ({ label: "Replace", accelerator: "⏎" })
-          selected: true
+          action: ({ label: "Replace", accelerator: root.resultIndex === 0 ? "⏎" : "r" })
+          selected: root.resultIndex === 0
           showKey: true
-          onClicked: root.replaceResult()
+          onClicked: { root.resultIndex = 0; root.replaceResult() }
+          onHovered: root.resultIndex = 0
         }
 
         Chip {
-          action: ({ label: "Copy", accelerator: "c" })
+          action: ({ label: "Copy", accelerator: root.resultIndex === 1 ? "⏎" : "c" })
+          selected: root.resultIndex === 1
           showKey: true
-          onClicked: root.copyResult()
+          onClicked: { root.resultIndex = 1; root.copyResult() }
+          onHovered: root.resultIndex = 1
         }
 
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: "Esc closes"
+          text: "← → choose · Esc closes"
           color: root.faint
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption

@@ -614,7 +614,15 @@ Item {
 
     // A result binds no filler: a stray key must not wipe out what is being read.
     function keyPlan() {
-      if (popup.mode === "result") return { consume: ["Return", "c"], filler: false }
+      // Read the result itself: a sibling binding has not always caught up
+      // by the time the mode change reaches this handler.
+      var shown = popup.result
+      if (shown) {
+        var picks = ["Return", "c"]
+        // Only a replaceable result has two choices to move between.
+        if (shown.replace === true) picks = picks.concat(["r", "Left", "Right", "Tab"])
+        return { consume: picks, filler: false }
+      }
       if (popup.mode === "confirm") return { consume: ["Return"], filler: false }
 
       var consume = []
@@ -733,12 +741,17 @@ Item {
       var value = String(name || "")
       if (value === "escape" || value === "Escape") { popup.back(); return "back" }
       if (value === "Return") return popup.pressReturn() ? "ran" : "ignored"
-      if (value === "Tab") return popup.pressTab() ? "expanded" : "ignored"
+      if (value === "Tab") {
+        if (!popup.pressTab()) return "ignored"
+        return popup.result ? "moved" : "expanded"
+      }
       if (value === "Left" || value === "Up") return popup.pressMove(-1) ? "moved" : "ignored"
       if (value === "Right" || value === "Down") return popup.pressMove(1) ? "moved" : "ignored"
       if (value === "equal") return popup.pressAnswer() ? "copied" : "ignored"
       if (value === "c" && popup.mode === "result")
         return popup.copyResult() ? "copied" : "ignored"
+      if (value === "r" && popup.mode === "result")
+        return popup.replaceResult() ? "replaced" : "ignored"
       if (value.length === 1
           && (popup.activateByKey(value) || popup.activateByKey(value.toUpperCase())))
         return "ran"
@@ -765,6 +778,7 @@ Item {
         sharing: service.sharing,
         open: popup.opened,
         keyboard: popup.keyboardActive,
+        choice: popup.resultChoosing ? popup.resultIndex : -1,
         bound: passiveKeys.bound.length,
         cursor: [popup.cursorX, popup.cursorY],
         search: service.searchTemplate,

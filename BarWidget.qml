@@ -30,6 +30,14 @@ Panel {
     return "Watching selections"
   }
 
+  // The kit's hero pill is pushed to the trailing edge of the label column,
+  // where it crowds the armed switch — the network panel dropped its own for
+  // the same reason. The count rides in the meta line instead.
+  readonly property string heroMeta: {
+    var count = actionsPill
+    return count === "" ? statusText : statusText + " · " + count
+  }
+
   readonly property string actionsPill: {
     if (!blip) return ""
     var total = blip.catalog.length
@@ -58,45 +66,67 @@ Panel {
 
   readonly property var sliderOrder: ["dwellSeconds", "maxActions", "minLength", "debounceMs"]
 
-  readonly property string tuningSummary: {
-    if (!blip) return ""
-    return Math.round(blip.dwellMs / 1000) + "s fade · " + blip.maxActions + " on the bar · "
-      + blip.minLength + "+ chars · " + blip.debounceMs + "ms settle"
-  }
+  // value doubles as the ButtonGroup option value and the tab key.
+  readonly property var tabs: [
+    { value: "general", label: "General" },
+    { value: "actions", label: "Actions" },
+    { value: "packs", label: "Packs" },
+    { value: "tuning", label: "Tuning" }
+  ]
+
+  property int tab: 0
+  readonly property string tabKey: String(tabs[tab].value)
 
   property var expandedModules: ({})
-  property bool packsExpanded: false
-  property bool tuningExpanded: false
   property int chipCursor: 0
   // returnRequested precedes activateRequested only for Enter; that tells it from Space.
   property bool enterKey: false
 
-  // Collapsing by mouse while the install field is focused would leave the
-  // keyboard routed to a hidden editor.
-  onPacksExpandedChanged: if (!packsExpanded && installField.activeFocus) keyCatcher.forceActiveFocus()
+  // Leaving the tab by mouse while the install field is focused would leave
+  // the keyboard routed to a hidden editor.
+  onTabKeyChanged: if (tabKey !== "packs" && installField.activeFocus) keyCatcher.forceActiveFocus()
+
+  // Each tab is its own page: the cursor lands back on the strip and the
+  // scroll starts at the top, so no row stays selected off-screen.
+  function setTab(next) {
+    var value = Math.max(0, Math.min(tabs.length - 1, next))
+    if (value === tab) return
+    var wasActive = cursorActive
+    tab = value
+    chipCursor = 0
+    if (flick) flick.contentY = 0
+    setCursorTo("tabs", "tabs")
+    cursorActive = wasActive
+  }
+
+  function setTabByKey(key) {
+    for (var i = 0; i < tabs.length; i++) {
+      if (String(tabs[i].value) === String(key)) { setTab(i); return }
+    }
+  }
 
   readonly property var navRows: {
-    var rows = [{ kind: "hero", id: "hero" }]
-    for (var i = 0; i < quickToggles.length; i++)
-      rows.push({ kind: "toggle", id: quickToggles[i].key, spec: quickToggles[i] })
-    if (blip && blip.consentCount > 0) rows.push({ kind: "consent", id: "consent" })
-    rows.push({ kind: "choice", id: "searchEngine" })
-    if (blip && blip.searchEngine === "Custom") rows.push({ kind: "searchurl", id: "searchurl" })
-    for (var m = 0; m < modules.length; m++) {
-      rows.push({ kind: "module", id: modules[m].key, module: modules[m] })
-      if (expandedModules[modules[m].key] === true)
-        rows.push({ kind: "chips", id: modules[m].key, module: modules[m] })
-    }
-    rows.push({ kind: "packs", id: "packs" })
-    if (packsExpanded) {
+    var rows = [{ kind: "hero", id: "hero" }, { kind: "tabs", id: "tabs" }]
+    if (tabKey === "general") {
+      for (var i = 0; i < quickToggles.length; i++)
+        rows.push({ kind: "toggle", id: quickToggles[i].key, spec: quickToggles[i] })
+      if (blip && blip.consentCount > 0) rows.push({ kind: "consent", id: "consent" })
+      rows.push({ kind: "choice", id: "searchEngine" })
+      if (blip && blip.searchEngine === "Custom") rows.push({ kind: "searchurl", id: "searchurl" })
+    } else if (tabKey === "actions") {
+      for (var m = 0; m < modules.length; m++) {
+        rows.push({ kind: "module", id: modules[m].key, module: modules[m] })
+        if (expandedModules[modules[m].key] === true)
+          rows.push({ kind: "chips", id: modules[m].key, module: modules[m] })
+      }
+    } else if (tabKey === "packs") {
       rows.push({ kind: "packinstall", id: "install" })
       for (var p = 0; p < packs.length; p++)
         rows.push({ kind: "pack", id: packs[p].name, pack: packs[p] })
-    }
-    rows.push({ kind: "tuning", id: "tuning" })
-    if (tuningExpanded)
+    } else if (tabKey === "tuning") {
       for (var s = 0; s < sliderOrder.length; s++)
         rows.push({ kind: "slider", id: sliderOrder[s] })
+    }
     return rows
   }
 
@@ -139,6 +169,8 @@ Panel {
     var row = cursorRow
     if (!row || !blip) return
     if (row.kind === "hero") blip.toggleArmed()
+    // Enter on the strip steps into the tab rather than changing it.
+    else if (row.kind === "tabs") moveCursor(1)
     else if (row.kind === "toggle") flipToggle(row.id)
     else if (row.kind === "consent") forgetConsents()
     else if (row.kind === "choice") searchDropdown.toggle()
@@ -148,10 +180,8 @@ Panel {
       else setModuleExpanded(row.id, !isModuleExpanded(row.id))
     }
     else if (row.kind === "chips") toggleChip(row.module)
-    else if (row.kind === "packs") packsExpanded = !packsExpanded
     else if (row.kind === "packinstall") installField.forceActiveFocus()
     else if (row.kind === "pack") notePackResult(blip.packUpdate(row.id))
-    else if (row.kind === "tuning") tuningExpanded = !tuningExpanded
   }
 
   function forgetConsents() {
@@ -183,10 +213,9 @@ Panel {
   function adjustCursor(dx) {
     var row = cursorRow
     if (!row || !blip) return
+    if (row.kind === "tabs") { setTab(tab + dx); return }
     if (row.kind === "choice") { blip.cycleSearchEngine(dx); return }
     if (row.kind === "module") { setModuleExpanded(row.id, dx > 0); return }
-    if (row.kind === "packs") { packsExpanded = dx > 0; return }
-    if (row.kind === "tuning") { tuningExpanded = dx > 0; return }
     if (row.kind === "chips") {
       var count = row.module ? row.module.actions.length : 0
       if (count > 0) chipCursor = Math.max(0, Math.min(count - 1, chipCursor + dx))
@@ -268,8 +297,7 @@ Panel {
     } else {
       // Collapse while hidden so reopening never shows the fold-up.
       expandedModules = ({})
-      packsExpanded = false
-      tuningExpanded = false
+      tab = 0
     }
   }
 
@@ -329,6 +357,8 @@ Panel {
         if (row && row.kind === "pack" && root.blip) root.notePackResult(root.blip.packRemove(row.id))
       }
       onTextKey: function(t) {
+        var digit = parseInt(t, 10)
+        if (digit >= 1 && digit <= root.tabs.length) { root.setTab(digit - 1); return }
         if (t === "r" || t === "R") { if (root.blip) root.blip.rescan() }
         else if (t === "e") { if (root.blip) root.blip.openActionsDir() }
         else if (t === "g") {
@@ -393,8 +423,7 @@ Panel {
               id: hero
               width: parent.width
               title: "Blip"
-              meta: root.statusText
-              detail: root.actionsPill
+              meta: root.heroMeta
               foreground: root.foreground
               fontFamily: root.fontFamily
               iconOpacity: root.armed && !root.suppressed ? 1.0 : 0.5
@@ -440,243 +469,275 @@ Panel {
             elide: Text.ElideRight
           }
 
-          PanelSeparator { foreground: root.foreground }
+          // One nav row: the strip owns the cursor, and ←→ walks it.
+          Item {
+            id: tabStrip
+            width: parent.width
+            implicitHeight: tabGroup.implicitHeight
 
-          PanelSectionHeader {
-            text: "BEHAVIOUR"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
+            readonly property bool ringVisible: root.cursorId === "tabs:tabs"
+            onRingVisibleChanged: if (ringVisible) root.scrollItemIntoView(tabStrip)
+
+            ButtonGroup {
+              id: tabGroup
+              anchors.horizontalCenter: parent.horizontalCenter
+              options: root.tabs
+              value: root.tabKey
+              // The panel drives the cursor, so the group never takes Tab focus.
+              focusable: false
+              cursorIndex: tabStrip.ringVisible ? root.tab : -1
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              onChanged: function(next) { root.setTabByKey(next) }
+              onHovered: function(index, isHovered) { if (isHovered) root.setCursorTo("tabs", "tabs") }
+            }
           }
+
+          PanelSeparator { foreground: root.foreground }
 
           Column {
             width: parent.width
-            spacing: Style.space(4)
-
-            Repeater {
-              model: root.quickToggles
-
-              SettingToggleRow {
-                width: parent.width
-                spec: modelData
-              }
-            }
-
-            ConsentRow { width: parent.width }
-          }
-
-          PanelSeparator { foreground: root.foreground }
-
-          PanelSectionHeader {
-            text: "SEARCH"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-          }
-
-          CursorSurface {
-            id: searchChoiceRow
-            width: parent.width
-            hasCursor: root.cursorId === "choice:searchEngine" && !searchDropdown.popupOpen
-            foreground: root.foreground
-            implicitHeight: searchChoiceContent.implicitHeight + Style.space(12)
-
-            onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(searchChoiceRow)
-
-            MouseArea {
-              anchors.fill: parent
-              hoverEnabled: true
-              acceptedButtons: Qt.NoButton
-              onEntered: root.setCursorTo("choice", "searchEngine")
-            }
-
-            Row {
-              id: searchChoiceContent
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.leftMargin: Style.space(10)
-              anchors.rightMargin: Style.space(10)
-              spacing: Style.space(8)
-
-              Column {
-                width: parent.width - searchDropdown.width - parent.spacing
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(1)
-
-                Text {
-                  width: parent.width
-                  text: "Search with"
-                  color: root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.body
-                  elide: Text.ElideRight
-                }
-
-                Text {
-                  width: parent.width
-                  text: "Where the Search action sends the selection"
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  elide: Text.ElideRight
-                }
-              }
-
-              Dropdown {
-                id: searchDropdown
-                anchors.verticalCenter: parent.verticalCenter
-                width: Style.space(140)
-                showLabel: false
-                options: {
-                  var out = []
-                  var engines = root.blip ? root.blip.searchEngines : []
-                  for (var i = 0; i < engines.length; i++) out.push(engines[i].name)
-                  return out
-                }
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                onChanged: function(next) { if (root.blip) root.blip.persist("searchEngine", next) }
-                onHovered: function(on) { if (on) root.setCursorTo("choice", "searchEngine") }
-                onPopupOpenChanged: if (!popupOpen) keyCatcher.forceActiveFocus()
-              }
-
-              // The popup assigns value imperatively on select, which would
-              // sever a plain binding to the service.
-              Binding {
-                target: searchDropdown
-                property: "value"
-                value: root.blip ? root.blip.searchEngine : ""
-              }
-            }
-          }
-
-          CursorSurface {
-            id: searchUrlRow
-
-            readonly property bool custom: root.blip !== null && root.blip.searchEngine === "Custom"
-            readonly property bool valid: root.blip ? root.blip.customSearchValid : false
-
-            width: parent.width
-            visible: custom
-            hasCursor: root.cursorId === "searchurl:searchurl" && !searchField.activeFocus
-            foreground: root.foreground
-            implicitHeight: custom ? searchUrlContent.implicitHeight + Style.space(12) : 0
-
-            onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(searchUrlRow)
-
-            MouseArea {
-              anchors.fill: parent
-              hoverEnabled: true
-              acceptedButtons: Qt.NoButton
-              onEntered: root.setCursorTo("searchurl", "searchurl")
-            }
-
-            Column {
-              id: searchUrlContent
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.leftMargin: Style.space(10)
-              anchors.rightMargin: Style.space(10)
-              spacing: Style.space(4)
-
-              TextField {
-                id: searchField
-                width: parent.width
-                placeholderText: "https://github.com/search?q=%s&type=code"
-                text: root.blip ? root.blip.customSearch : ""
-                foreground: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
-                onAccepted: if (root.blip) root.blip.persist("searchUrl", text)
-                Keys.onEscapePressed: keyCatcher.forceActiveFocus()
-              }
-
-              Text {
-                width: parent.width
-                text: searchUrlRow.valid
-                  ? "Enter to save."
-                  : "Put %s where the selection goes, then press Enter. Until then, DuckDuckGo."
-                color: searchUrlRow.valid ? root.dim : root.urgent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                wrapMode: Text.WordWrap
-              }
-            }
-          }
-
-          PanelSeparator { foreground: root.foreground }
-
-          Item {
-            width: parent.width
-            implicitHeight: Math.max(actionsHeader.implicitHeight, actionsHeaderButtons.implicitHeight)
+            visible: root.tabKey === "general"
+            spacing: Style.space(12)
 
             PanelSectionHeader {
-              id: actionsHeader
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-              text: "ACTIONS"
+              text: "BEHAVIOUR"
               foreground: root.foreground
               fontFamily: root.fontFamily
             }
 
-            Row {
-              id: actionsHeaderButtons
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
+            Column {
+              width: parent.width
               spacing: Style.space(4)
 
-              PanelActionButton {
-                iconText: "󰑐"
-                tooltipText: "Rescan action files (r)"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                onClicked: if (root.blip) root.blip.rescan()
+              Repeater {
+                model: root.quickToggles
+
+                SettingToggleRow {
+                  width: parent.width
+                  spec: modelData
+                }
               }
 
-              PanelActionButton {
-                iconText: "󰝒"
-                tooltipText: "Open your actions folder (e)"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                onClicked: if (root.blip) root.blip.openActionsDir()
+              ConsentRow { width: parent.width }
+            }
+
+            PanelSeparator { foreground: root.foreground }
+
+            PanelSectionHeader {
+              text: "SEARCH"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            CursorSurface {
+              id: searchChoiceRow
+              width: parent.width
+              hasCursor: root.cursorId === "choice:searchEngine" && !searchDropdown.popupOpen
+              foreground: root.foreground
+              implicitHeight: searchChoiceContent.implicitHeight + Style.space(12)
+
+              onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(searchChoiceRow)
+
+              MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+                onEntered: root.setCursorTo("choice", "searchEngine")
+              }
+
+              Row {
+                id: searchChoiceContent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Style.space(10)
+                anchors.rightMargin: Style.space(10)
+                spacing: Style.space(8)
+
+                Column {
+                  width: parent.width - searchDropdown.width - parent.spacing
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Style.space(1)
+
+                  Text {
+                    width: parent.width
+                    text: "Search with"
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    elide: Text.ElideRight
+                  }
+
+                  Text {
+                    width: parent.width
+                    text: "Where the Search action sends the selection"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    elide: Text.ElideRight
+                  }
+                }
+
+                Dropdown {
+                  id: searchDropdown
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(140)
+                  showLabel: false
+                  options: {
+                    var out = []
+                    var engines = root.blip ? root.blip.searchEngines : []
+                    for (var i = 0; i < engines.length; i++) out.push(engines[i].name)
+                    return out
+                  }
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  onChanged: function(next) { if (root.blip) root.blip.persist("searchEngine", next) }
+                  onHovered: function(on) { if (on) root.setCursorTo("choice", "searchEngine") }
+                  onPopupOpenChanged: if (!popupOpen) keyCatcher.forceActiveFocus()
+                }
+
+                // The popup assigns value imperatively on select, which would
+                // sever a plain binding to the service.
+                Binding {
+                  target: searchDropdown
+                  property: "value"
+                  value: root.blip ? root.blip.searchEngine : ""
+                }
+              }
+            }
+
+            CursorSurface {
+              id: searchUrlRow
+
+              readonly property bool custom: root.blip !== null && root.blip.searchEngine === "Custom"
+              readonly property bool valid: root.blip ? root.blip.customSearchValid : false
+
+              width: parent.width
+              visible: custom
+              hasCursor: root.cursorId === "searchurl:searchurl" && !searchField.activeFocus
+              foreground: root.foreground
+              implicitHeight: custom ? searchUrlContent.implicitHeight + Style.space(12) : 0
+
+              onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(searchUrlRow)
+
+              MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+                onEntered: root.setCursorTo("searchurl", "searchurl")
+              }
+
+              Column {
+                id: searchUrlContent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Style.space(10)
+                anchors.rightMargin: Style.space(10)
+                spacing: Style.space(4)
+
+                TextField {
+                  id: searchField
+                  width: parent.width
+                  placeholderText: "https://github.com/search?q=%s&type=code"
+                  text: root.blip ? root.blip.customSearch : ""
+                  foreground: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  onAccepted: if (root.blip) root.blip.persist("searchUrl", text)
+                  Keys.onEscapePressed: keyCatcher.forceActiveFocus()
+                }
+
+                Text {
+                  width: parent.width
+                  text: searchUrlRow.valid
+                    ? "Enter to save."
+                    : "Put %s where the selection goes, then press Enter. Until then, DuckDuckGo."
+                  color: searchUrlRow.valid ? root.dim : root.urgent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  wrapMode: Text.WordWrap
+                }
               }
             }
           }
 
-          Repeater {
-            model: root.modules
-
-            Column {
-              width: column.width
-              spacing: Style.space(2)
-
-              readonly property var module: modelData
-
-              ModuleHeaderRow {
-                width: parent.width
-                module: parent.module
-              }
-
-              ModuleChipsArea {
-                width: parent.width
-                module: parent.module
-              }
-            }
-          }
-
-          PanelSeparator { foreground: root.foreground }
-
-          PacksHeaderRow { width: parent.width }
-
-          Item {
+          Column {
             width: parent.width
-            clip: true
-            visible: implicitHeight > 0
-            implicitHeight: root.packsExpanded ? packsColumn.implicitHeight : 0
-            opacity: root.packsExpanded ? 1 : 0
+            visible: root.tabKey === "actions"
+            spacing: Style.space(12)
 
-            Behavior on implicitHeight { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-            Behavior on opacity { NumberAnimation { duration: 160 } }
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(actionsHeader.implicitHeight, actionsHeaderButtons.implicitHeight)
+
+              PanelSectionHeader {
+                id: actionsHeader
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: "ACTIONS"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+
+              Row {
+                id: actionsHeaderButtons
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(4)
+
+                PanelActionButton {
+                  iconText: "󰑐"
+                  tooltipText: "Rescan action files (r)"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  onClicked: if (root.blip) root.blip.rescan()
+                }
+
+                PanelActionButton {
+                  iconText: "󰝒"
+                  tooltipText: "Open your actions folder (e)"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  onClicked: if (root.blip) root.blip.openActionsDir()
+                }
+              }
+            }
+
+            Repeater {
+              model: root.modules
+
+              Column {
+                width: column.width
+                spacing: Style.space(2)
+
+                readonly property var module: modelData
+
+                ModuleHeaderRow {
+                  width: parent.width
+                  module: parent.module
+                }
+
+                ModuleChipsArea {
+                  width: parent.width
+                  module: parent.module
+                }
+              }
+            }
+          }
+
+          Column {
+            width: parent.width
+            visible: root.tabKey === "packs"
+            spacing: Style.space(12)
+
+            PanelSectionHeader {
+              text: "PACKS"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
 
             Column {
               id: packsColumn
@@ -778,19 +839,16 @@ Panel {
             }
           }
 
-          PanelSeparator { foreground: root.foreground }
-
-          TuningHeaderRow { width: parent.width }
-
-          Item {
+          Column {
             width: parent.width
-            clip: true
-            visible: implicitHeight > 0
-            implicitHeight: root.tuningExpanded ? slidersColumn.implicitHeight : 0
-            opacity: root.tuningExpanded ? 1 : 0
+            visible: root.tabKey === "tuning"
+            spacing: Style.space(12)
 
-            Behavior on implicitHeight { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-            Behavior on opacity { NumberAnimation { duration: 160 } }
+            PanelSectionHeader {
+              text: "FINE-TUNING"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
 
             Column {
               id: slidersColumn
@@ -806,7 +864,7 @@ Panel {
 
           Text {
             width: parent.width
-            text: "↑↓ move · ←→ open · Enter select · Esc close"
+            text: "1-4 tabs · ↑↓ move · ←→ change · Enter select · Esc close"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -891,7 +949,7 @@ Panel {
     visible: count > 0
     hasCursor: root.cursorId === "consent:consent"
     foreground: root.foreground
-    implicitHeight: visible ? consentContent.implicitHeight + Style.space(8) : 0
+    implicitHeight: visible ? consentContent.implicitHeight + Style.space(12) : 0
 
     onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(consentRow)
 
@@ -1223,134 +1281,6 @@ Panel {
       cursorShape: Qt.PointingHandCursor
       onEntered: chip.hoveredChip()
       onClicked: chip.clicked()
-    }
-  }
-
-  component PacksHeaderRow: CursorSurface {
-    id: packsRow
-
-    hasCursor: root.cursorId === "packs:packs"
-    foreground: root.foreground
-    implicitHeight: packsHeaderContent.implicitHeight + Style.space(12)
-
-    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(packsRow)
-
-    MouseArea {
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursorTo("packs", "packs")
-      onClicked: root.packsExpanded = !root.packsExpanded
-    }
-
-    Row {
-      id: packsHeaderContent
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(10)
-      anchors.rightMargin: Style.space(10)
-      spacing: Style.space(8)
-
-      Column {
-        width: parent.width - packsChevron.width - parent.spacing
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(1)
-
-        Text {
-          width: parent.width
-          text: "Packs"
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.subtitle
-          font.bold: true
-          elide: Text.ElideRight
-        }
-
-        Text {
-          width: parent.width
-          text: {
-            if (root.blip && root.blip.packBusy) return root.blip.packStatus
-            if (root.packs.length === 0) return "None yet — add a git repo of actions"
-            return root.packs.length + " installed"
-          }
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          elide: Text.ElideRight
-        }
-      }
-
-      Text {
-        id: packsChevron
-        anchors.verticalCenter: parent.verticalCenter
-        text: root.packsExpanded ? "󰅀" : "󰅂"
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.body
-      }
-    }
-  }
-
-  component TuningHeaderRow: CursorSurface {
-    id: tuningRow
-
-    hasCursor: root.cursorId === "tuning:tuning"
-    foreground: root.foreground
-    implicitHeight: tuningContent.implicitHeight + Style.space(12)
-
-    onHasCursorChanged: if (hasCursor) root.scrollItemIntoView(tuningRow)
-
-    MouseArea {
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursorTo("tuning", "tuning")
-      onClicked: root.tuningExpanded = !root.tuningExpanded
-    }
-
-    Row {
-      id: tuningContent
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(10)
-      anchors.rightMargin: Style.space(10)
-      spacing: Style.space(8)
-
-      Column {
-        width: parent.width - tuningChevron.width - parent.spacing
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(1)
-
-        Text {
-          width: parent.width
-          text: "Fine-tuning"
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.subtitle
-          font.bold: true
-          elide: Text.ElideRight
-        }
-
-        Text {
-          width: parent.width
-          text: root.tuningSummary
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          elide: Text.ElideRight
-        }
-      }
-
-      Text {
-        id: tuningChevron
-        anchors.verticalCenter: parent.verticalCenter
-        text: root.tuningExpanded ? "󰅀" : "󰅂"
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.body
-      }
     }
   }
 
