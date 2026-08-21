@@ -42,7 +42,10 @@ the keyboard if it is already up, closes it if it already has the keyboard.
 
 Select something. The bar fades in just above the pointer, flips below it when
 there is no room, and never takes focus. Move the pointer well away and it
-closes; leave it alone and it fades after a few seconds.
+closes; leave it alone and it fades after a few seconds. Click anywhere else and
+it closes there and then. Right-click and it gets out of the way of the app's
+own context menu — the click still reaches the app, so the menu opens as it
+always did.
 
 | Key | |
 |---|---|

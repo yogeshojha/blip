@@ -95,6 +95,8 @@ Item {
   readonly property int maxActions: Math.max(1, Number(setting("maxActions")) || 6)
   readonly property int debounceMs: Math.max(0, Number(setting("debounceMs")) || 0)
   readonly property int dwellMs: Math.max(1, Number(setting("dwellSeconds")) || 4) * 1000
+  // Long enough for a word the app selects on its way to its own menu to pass through.
+  readonly property int contextMenuMs: 700
   readonly property var blocklist: {
     var raw = String(setting("blockedApps") || "").split(",")
     var out = []
@@ -142,6 +144,7 @@ Item {
   property bool sharing: false
   property bool skipFirstEvent: true
   property var pending: null
+  property double suppressUntil: 0
 
   property var fileEntries: []
   property var runtimeEntries: []
@@ -324,6 +327,8 @@ Item {
   function present(text, focus) {
     if (!armed) return "disarmed"
     if (suppressed) return "sharing"
+    // A context menu is up; only the keybind, which is deliberate, still gets through.
+    if (focus !== true && Date.now() < suppressUntil) return "context menu"
     var value = String(text || "")
     if (value.replace(/^\s+|\s+$/g, "").length < minLength) return "too short"
     if (value.length > maxLength) return "too long"
@@ -403,6 +408,7 @@ Item {
     watcher.running = armed
     // A crash skips onDestruction, so sweep the consuming set at startup too.
     passiveKeys.sweep()
+    pointerGuard.apply()
   }
 
   readonly property string sharingScript: ""
@@ -658,6 +664,12 @@ Item {
       // Escape also reaches the window, which clears the selection behind it.
       lua.push(bindLine("Escape", "omarchy-shell blip key escape", true))
       next.push("Escape")
+      // A press away from the card is the user moving on; the bar must not outlive it.
+      var buttons = { "mouse:272": "left", "mouse:274": "middle" }
+      for (var button in buttons) {
+        lua.push(bindLine(button, "omarchy-shell blip click " + buttons[button], true))
+        next.push(button)
+      }
       for (var j = 0; j < plan.consume.length; j++) {
         lua.push(bindLine(plan.consume[j], "omarchy-shell blip key " + plan.consume[j], false))
         next.push(plan.consume[j])
@@ -691,7 +703,7 @@ Item {
     // Only what can be bound consuming: a leak there eats the key system wide.
     function sweep() {
       var lua = []
-      var extra = ["equal", "Tab", "Return", "Left", "Right"]
+      var extra = ["equal", "Tab", "Return", "Left", "Right", "mouse:272", "mouse:274"]
       for (var i = 0; i < filler.length; i++) {
         if (filler[i].length !== 1) continue
         lua.push('hl.unbind("' + filler[i] + '")')
@@ -707,6 +719,27 @@ Item {
     }
   }
 
+  // Bound whenever the bar can appear, not only while it is up: an app that selects
+  // the word under the pointer on right-click would raise the bar onto its own menu.
+  QtObject {
+    id: pointerGuard
+
+    readonly property bool wanted: service.armed
+
+    // Unbind first: a crash leaves the bind behind and the sweep runs too early to clear it.
+    function apply() {
+      var lua = ['hl.unbind("mouse:273")']
+      if (wanted) lua.push(passiveKeys.bindLine("mouse:273", "omarchy-shell blip click right", true))
+      passiveKeys.dispatch(lua)
+    }
+
+    function clear() {
+      passiveKeys.dispatch(['hl.unbind("mouse:273")'])
+    }
+
+    onWantedChanged: apply()
+  }
+
   Connections {
     target: popup
     function onOpenedChanged() {
@@ -719,7 +752,10 @@ Item {
     function onNavigatedChanged() { passiveKeys.apply() }
   }
 
-  Component.onDestruction: passiveKeys.clear()
+  Component.onDestruction: {
+    passiveKeys.clear()
+    pointerGuard.clear()
+  }
 
   IpcHandler {
     target: "blip"
@@ -762,6 +798,18 @@ Item {
     }
 
     function dismiss(): string { popup.close(); return "ok" }
+
+    // Routed here by the mouse binds; all non-consuming, so the click still lands behind.
+    function click(button: string): string {
+      var name = String(button || "")
+      if (name === "right") {
+        service.suppressUntil = Date.now() + service.contextMenuMs
+        debounce.stop()
+        service.pending = null
+      }
+      if (!popup.opened) return "closed"
+      return popup.pressPointer(name) ? "dismissed" : "ignored"
+    }
 
     function arm(): string { service.setArmed(true); return "armed" }
     function disarm(): string { service.setArmed(false); return "disarmed" }

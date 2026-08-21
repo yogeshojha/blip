@@ -31,6 +31,15 @@ Item {
   property bool focusPrimed: false
   property bool morphEnabled: false
 
+  // Moved forward on every change a click could be racing; see pressPointer.
+  property double quietUntil: 0
+  readonly property int settleMs: 350
+
+  // Set before opened changes: the animations read it as they start, and a binding
+  // on opened alone need not have re-evaluated by then.
+  property bool entering: false
+  readonly property int exitMs: 130
+
   signal runRequested(var action)
   signal copyRequested(string text)
   signal replaceRequested(string text)
@@ -89,12 +98,15 @@ Item {
     busy = false
     morphEnabled = false
     morphTimer.restart()
+    quietUntil = Date.now() + settleMs
+    entering = true
     opened = true
     setKeyboard(focus === true)
   }
 
   function close() {
     if (!opened) return
+    entering = false
     opened = false
     keyboardActive = false
     focusPrimed = false
@@ -136,6 +148,7 @@ Item {
   }
 
   function activate() {
+    quietUntil = Date.now() + settleMs
     if (moreSelected) { setExpanded(true); return }
     var action = rows[index]
     if (!action || busy) return
@@ -170,6 +183,7 @@ Item {
   }
 
   function showResult(payload) {
+    quietUntil = Date.now() + settleMs
     busy = false
     replaced = false
     resultIndex = 0
@@ -232,6 +246,18 @@ Item {
     return true
   }
 
+  // Routed in from the service's mouse binds: outside the card the bar has no input.
+  function pressPointer(button) {
+    if (!opened) return false
+    // A context menu is on its way up and the bar, on the overlay layer, covers it.
+    if (button === "right") { close(); return true }
+    if (hover.hovered) return false
+    // Clicks widen a selection press by press: the second must not close the first.
+    if (Date.now() < quietUntil) return false
+    close()
+    return true
+  }
+
   function copyResult() {
     if (!result) return false
     copyRequested(result.copy)
@@ -240,6 +266,7 @@ Item {
 
   // Also drops the result: Enter during the notice must not fire a replace.
   function flash(message) {
+    quietUntil = Date.now() + settleMs
     busy = false
     result = null
     notice = message
@@ -441,11 +468,28 @@ Item {
       transform: Translate {
         y: root.opened ? 0 : (root.placeAbove ? Style.space(6) : -Style.space(6))
 
-        Behavior on y { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+        Behavior on y {
+          NumberAnimation {
+            duration: root.entering ? 200 : root.exitMs
+            easing.type: root.entering ? Easing.OutCubic : Easing.InOutQuad
+          }
+        }
       }
 
-      Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-      Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.4 } }
+      // Linear out: an eased fade is mostly over in its first 40ms and reads as a blink.
+      Behavior on opacity {
+        NumberAnimation {
+          duration: root.entering ? 150 : root.exitMs
+          easing.type: root.entering ? Easing.OutCubic : Easing.Linear
+        }
+      }
+      Behavior on scale {
+        NumberAnimation {
+          duration: root.entering ? 260 : root.exitMs
+          easing.type: root.entering ? Easing.OutBack : Easing.InOutQuad
+          easing.overshoot: 1.4
+        }
+      }
 
       // Only the size animates: x and y derive from it and track in sync.
       Behavior on width { enabled: root.morphEnabled; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
