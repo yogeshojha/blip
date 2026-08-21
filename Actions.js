@@ -153,6 +153,10 @@ function normalizeAction(raw, origin, source) {
 function mergeCatalog(entries) {
   var byId = {}
   var order = []
+  var builtinIds = []
+  for (var b = 0; b < entries.length; b++) {
+    if (entries[b].origin === "builtin") builtinIds.push(entries[b].id)
+  }
   var decorated = entries.map(function(action, index) { return { action: action, index: index } })
   decorated.sort(function(a, b) {
     var rank = (ORIGIN_RANK[a.action.origin] || 0) - (ORIGIN_RANK[b.action.origin] || 0)
@@ -160,7 +164,10 @@ function mergeCatalog(entries) {
   })
   for (var i = 0; i < decorated.length; i++) {
     var action = decorated[i].action
-    if (!byId[action.id]) order.push(action.id)
+    // A pack may add ids, never take over or switch off one that ships with Blip.
+    if (action.origin === "pack" && builtinIds.indexOf(action.id) !== -1) continue
+    // An id like "constructor" is truthy on a bare object, so ask for an own key.
+    if (!Object.prototype.hasOwnProperty.call(byId, action.id)) order.push(action.id)
     byId[action.id] = action
   }
   var out = []
@@ -261,27 +268,10 @@ function loadCatalog(scanText) {
 }
 
 // ------------------------------------------------------------------ packs
-// A pack is a git repository cloned under ~/.config/omarchy/blip/packs/.
-
-function isPackSource(url) {
-  var s = trim(url)
-  if (/^https:\/\/\S+$/.test(s)) return true
-  if (/^\/\S+$/.test(s)) return true // a local directory, for developing packs
-  return false
-}
+// A pack is a folder under ~/.config/omarchy/blip/packs/.
 
 function isPackName(name) {
   return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(name || ""))
-}
-
-// "https://github.com/you/Blip-Pack-DevTools.git" -> "devtools".
-// Lowercase before stripping, or a cased prefix survives.
-function packNameFromSource(url) {
-  var base = trim(url).replace(/\/+$/, "").replace(/\.git$/i, "")
-  base = base.slice(base.lastIndexOf("/") + 1).toLowerCase()
-  base = base.replace(/^blip-pack-/, "").replace(/^blip-/, "")
-  base = base.replace(/[^a-z0-9._-]+/g, "-").replace(/^[-._]+|[-._]+$/g, "")
-  return isPackName(base) ? base : ""
 }
 
 var MODULE_TITLES = { core: "Core", text: "Text tools" }

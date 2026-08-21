@@ -10,10 +10,6 @@ Basic Usage
 
 [https://github.com/user-attachments/assets/501127b1-cdcd-454e-abed-d953d2d8a6c7](https://github.com/user-attachments/assets/cd4988a6-21c8-4942-94a3-24df7a8ad8e5)
 
-Installing External Plugins 
-
-[https://github.com/user-attachments/assets/bdec6b13-6292-4f5d-af76-d3967f6be4bc](https://github.com/user-attachments/assets/f5f93730-12af-4a8c-b4f5-d3b29572e90d)
-
 A URL gets Open and QR. A JWT gets Decode with the expiry flagged. Minified JSON
 gets Format. A file path gets Open, Edit, Reveal, Terminal here. Anything at all
 gets Search, GitHub and Ask agent, with Copy behind them.
@@ -128,12 +124,50 @@ Drop a `.jsonc` in `~/.config/omarchy/blip/actions/`. No code, no restart.
 An action can open a url, run a script over the selection, or call another
 plugin over IPC and show whatever comes back.
 
-Bundle a few into a git repository and you have a pack. Anyone can install it in
-one line:
+What ships covers what everyone needs. What makes Blip yours is the file only
+you would write.
+
+Say you look up domains all day. Blip's `Whois` fires on an IP only — a bare
+hostname is plain text to it. So write your own:
+
+```jsonc
+{
+  "id": "me.whois",
+  "label": "Whois",
+  "network": true,
+  "host": "the domain's registry",
+  "when": {
+    "notTypes": ["ip", "url", "email"],
+    "matches": "^[a-zA-Z0-9-]+(\\.[a-zA-Z0-9-]+)+$",
+    "notMatches": "\\.(rs|js|ts|py|go|sh|md|json|toml|lock|css|html?)$"
+  },
+  "run": { "script": "whois-domain.sh" },
+  "output": "show"
+}
+```
 
 ```bash
-omarchy-shell blip packAdd https://github.com/…/blip-pack-…
+#!/bin/bash
+domain=$(head -c 253 | tr -d '[:space:]')
+whois "$domain" | head -40
 ```
+
+That `notMatches` earns its place: `main.rs` and `package.json` look exactly
+like domains until you say they are not.
+
+The rest is the same shape with a different day job. A pod name goes to
+`kubectl describe`, a git SHA opens the commit on your host, a customer id
+opens the account in your admin panel. Select it, press one letter, read the
+answer without leaving the window.
+
+Bundle a few into a folder and you have a pack, publishable anywhere. You clone
+it into `packs/` yourself, and it loads the moment it lands.
+
+```bash
+git clone https://github.com/…/blip-pack-… ~/.config/omarchy/blip/packs/devtools
+```
+
+A pack's scripts run as you, so read them first.
 
 A pack can teach Blip to spot things it has never heard of. A regex is enough to
 turn a bare hostname, a ticket id or an order number into something the bar
@@ -166,8 +200,8 @@ behaviour toggles, the search engine, and a row per module. A module opens into
 a grid of chips — the same chips the bar shows — and clicking one turns that
 action off or on, so you can drop the text tools, or just `Run`, without
 touching a file; the module's switch, or `Space`, flips them all at once. Packs
-install from a pasted git URL and update or remove from the same fold, and
-installing or removing one asks first — see
+list in their own fold, `Enter` opens a pack's folder and `x` removes it after
+asking — see
 [ACTIONS.md](ACTIONS.md#action-packs) — and the sliders sit folded under
 *Fine-tuning*, values readable on the closed row. `↑↓` move, `←→` fold and
 unfold, `Enter` selects. Right-click the icon to arm and disarm without opening
@@ -184,8 +218,9 @@ entry in `shell.json` is what keeps the plugin enabled.
 omarchy plugin remove io.github.yogeshojha.blip
 ```
 
-That takes the plugin and its bar entry. Your actions and what you allowed live
-in `~/.config/omarchy/blip/`; delete that too if you want nothing left behind.
+That takes the plugin and its bar entry. Your actions, your packs and what you
+allowed live in `~/.config/omarchy/blip/`; delete that too if you want nothing
+left behind.
 
 ## Privacy
 
@@ -196,6 +231,8 @@ in `~/.config/omarchy/blip/`; delete that too if you want nothing left behind.
   actions, and Blip asks before the first send, naming the action and the host.
   `omarchy-shell blip forget` clears what you allowed. Handing the selection to
   an app you can see, such as your browser or your agent, is not gated.
+- Packs are folders you put under `~/.config/omarchy/blip/packs/` yourself. Blip
+  reads what is there and never downloads or updates one.
 - Scripts and the clipboard get the selection on stdin. `exec` actions expand
   it into their argv, where it is visible in the process table while the
   command runs.

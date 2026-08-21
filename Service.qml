@@ -173,7 +173,7 @@ Item {
   readonly property bool suppressed: sharing && pauseWhenSharing
 
   // ---------------------------------------------------------------- packs
-  // A pack is a git repository under ~/.config/omarchy/blip/packs/.
+  // A pack is a folder under ~/.config/omarchy/blip/packs/.
 
   property var installedPacks: []
   property bool packBusy: false
@@ -189,7 +189,8 @@ Item {
       for (var j = 0; j < catalog.length; j++) {
         if (catalog[j].origin === "pack" && String(catalog[j].source).indexOf(marker) !== -1) count++
       }
-      out.push({ name: pack.name, path: pack.path, actions: count })
+      // A folder isPackName refuses still loads; it just cannot be removed from here.
+      out.push({ name: pack.name, path: pack.path, actions: count, removable: Actions.isPackName(pack.name) })
     }
     return out
   }
@@ -201,67 +202,35 @@ Item {
     return false
   }
 
-  // The panel asks before it installs, so it needs the name and any objection first.
-  function packCheck(source) {
-    var src = Actions.expandHome(String(source || "").replace(/^\s+|\s+$/g, ""), home)
-    if (packBusy) return { error: "another pack operation is running" }
-    if (!Actions.isPackSource(src)) return { error: "packs install from an https:// git url or an absolute local path" }
-    var name = Actions.packNameFromSource(src)
-    if (!name) return { error: "cannot derive a pack name from '" + src + "'" }
-    if (hasPack(name)) return { error: "pack '" + name + "' is already installed" }
-    return { error: "", name: name, source: src }
-  }
-
-  function packAdd(source) {
-    var check = packCheck(source)
-    if (check.error) return "error: " + check.error
-    // Staged in a dot-prefixed dir the scanner skips, moved into place in
-    // one step, so the catalog never sees half a pack.
-    var dest = userDir + "/packs/" + check.name
-    var staging = userDir + "/packs/.staging-" + check.name
-    runPack("add", check.name, ["bash", "-c",
-      'set -e; [ ! -e "$2" ] || { echo "a pack named $(basename -- "$2") is already installed" >&2; exit 1; }; '
-      // git calls a plain directory a repository that does not exist, which reads
-      // as a missing folder when the folder is right there.
-      + 'case "$0" in /*) [ -d "$0" ] || { echo "no such folder: $0" >&2; exit 1; }; '
-      + '[ -d "$0/.git" ] || { echo "$0 is not a git repository - run git init there" >&2; exit 1; };; esac; '
-      + 'rm -rf -- "$1"; git clone --depth 1 -- "$0" "$1"; mv -T -- "$1" "$2"',
-      check.source, staging, dest])
-    return "installing " + check.name
-  }
-
-  function packUpdate(name) {
-    var key = String(name || "").replace(/^\s+|\s+$/g, "")
-    if (packBusy) return "error: another pack operation is running"
-    if (!Actions.isPackName(key) || !hasPack(key)) return "error: no pack named '" + key + "'"
-    runPack("update", key, ["git", "-C", userDir + "/packs/" + key, "pull", "--ff-only"])
-    return "updating " + key
-  }
-
   function packRemove(name) {
     var key = String(name || "").replace(/^\s+|\s+$/g, "")
     if (packBusy) return "error: another pack operation is running"
     if (!Actions.isPackName(key) || !hasPack(key)) return "error: no pack named '" + key + "'"
-    runPack("remove", key, ["rm", "-rf", "--", userDir + "/packs/" + key])
+    packBusy = true
+    packStatusUrgent = false
+    packStatus = "Removing " + key + "…"
+    packStatusClear.stop()
+    packProc.packName = key
+    packProc.timedOut = false
+    packProc.command = ["rm", "-rf", "--", userDir + "/packs/" + key]
+    packProc.running = true
     return "removing " + key
   }
 
-  function runPack(op, name, argv) {
-    packBusy = true
-    packStatusUrgent = false
-    packStatus = (op === "add" ? "Installing " : op === "update" ? "Updating " : "Removing ") + name + "…"
-    packStatusClear.stop()
-    packProc.op = op
-    packProc.packName = name
-    packProc.timedOut = false
-    packProc.command = argv
-    packProc.running = true
+  function openPackDir(name) {
+    var key = String(name || "").replace(/^\s+|\s+$/g, "")
+    if (!Actions.isPackName(key) || !hasPack(key)) return "error: no pack named '" + key + "'"
+    Quickshell.execDetached(["bash", "-c", 'xdg-open "$1"', "blip", userDir + "/packs/" + key])
+    return "ok"
+  }
+
+  function openPacksDir() {
+    Quickshell.execDetached(["bash", "-c", 'mkdir -p "$1" && xdg-open "$1"', "blip", userDir + "/packs"])
   }
 
   Process {
     id: packProc
 
-    property string op: ""
     property string packName: ""
     property bool timedOut: false
 
@@ -269,10 +238,10 @@ Item {
     onExited: function(exitCode) {
       service.packBusy = false
       if (timedOut) {
-        service.packStatus = packName + ": gave up after 2 minutes"
+        service.packStatus = packName + ": gave up after 30 seconds"
         service.packStatusUrgent = true
       } else if (exitCode === 0) {
-        service.packStatus = (op === "add" ? "Installed " : op === "update" ? "Updated " : "Removed ") + packName
+        service.packStatus = "Removed " + packName
         service.packStatusUrgent = false
       } else {
         var lines = String(packErr.text || "").replace(/\s+$/, "").split("\n")
@@ -284,10 +253,10 @@ Item {
     }
   }
 
-  // A clone against a dead network would otherwise hold packBusy forever.
+  // A wedged rm would otherwise hold packBusy forever.
   Timer {
     running: packProc.running
-    interval: 120000
+    interval: 30000
     onTriggered: {
       packProc.timedOut = true
       packProc.running = false
@@ -1032,10 +1001,8 @@ Item {
     function reload(): string { service.rescan(); return "ok" }
     function forget(): string { service.forgetConsent(); return "ok" }
 
-    // Packs: the same operations the panel's PACKS section runs.
+    // Packs: what is installed, and removing one.
     function packs(): string { return JSON.stringify(service.packList, null, 2) }
-    function packAdd(source: string): string { return service.packAdd(source) }
-    function packUpdate(name: string): string { return service.packUpdate(name) }
     function packRemove(name: string): string { return service.packRemove(name) }
 
     function detect(text: string): string {

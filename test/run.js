@@ -294,12 +294,6 @@ equal("pack directories are reported", withPacks.packs.map(function(p) { return 
 equal("an empty pack still shows up", withPacks.packs[1].name, "empty")
 equal("packdir markers do not eat actions", withPacks.entries.length, 2)
 
-equal("pack name from a git url", Actions.packNameFromSource("https://github.com/you/blip-pack-devtools.git"), "devtools")
-equal("pack name from a plain repo", Actions.packNameFromSource("https://github.com/you/K8s-Tools"), "k8s-tools")
-equal("pack name from a local path", Actions.packNameFromSource("/home/me/src/blip-jira/"), "jira")
-equal("a cased prefix still strips", Actions.packNameFromSource("https://github.com/you/Blip-Pack-DevTools.git"), "devtools")
-equal("garbage yields no pack name", Actions.packNameFromSource("https://github.com/you/..."), "")
-
 // The runtime scan opens with a random boundary token; markers inside file
 // bodies must be treated as body text, not honoured.
 const bounded = Actions.loadCatalog([
@@ -320,13 +314,82 @@ equal("forged markers register nothing", bounded.entries.filter(function(a) { re
 check("the poisoned file reports itself instead", bounded.errors.length === 1 && /evil\/actions\/x\.jsonc/.test(bounded.errors[0]), bounded.errors.join(" | "))
 equal("packdir markers carry the token too", bounded.packs.map(function(p) { return p.name }).join(","), "evil")
 
-check("https sources are accepted", Actions.isPackSource("https://github.com/you/pack.git"))
-check("local paths are accepted", Actions.isPackSource("/home/me/src/pack"))
-check("http is refused", !Actions.isPackSource("http://github.com/you/pack.git"))
-check("ssh urls are refused", !Actions.isPackSource("git@github.com:you/pack.git"))
-check("commands are not sources", !Actions.isPackSource("https://x.com/a; rm -rf ~"))
+// packRemove interpolates the name into an rm argv, so isPackName is a guard.
 check("pack names cannot traverse", !Actions.isPackName("../escape"))
 check("pack names cannot be nested", !Actions.isPackName("a/b"))
+check("pack names cannot be dot", !Actions.isPackName("."))
+check("pack names cannot be dotdot", !Actions.isPackName(".."))
+check("pack names cannot be hidden", !Actions.isPackName(".hidden"))
+check("pack names cannot be empty", !Actions.isPackName(""))
+check("pack names cannot lead with a dash", !Actions.isPackName("-rf"))
+check("pack names cannot hold spaces", !Actions.isPackName("a b"))
+check("pack names cannot hold a newline", !Actions.isPackName("a\nb"))
+check("pack names cannot trail a newline", !Actions.isPackName("a\n"))
+check("pack names cannot hold a semicolon", !Actions.isPackName("a;rm -rf ~"))
+check("pack names cannot hold a tilde", !Actions.isPackName("~"))
+check("pack names cannot be absolute", !Actions.isPackName("/etc"))
+check("pack names cannot hold a null", !Actions.isPackName("a b"))
+check("undefined is not a pack name", !Actions.isPackName(undefined))
+check("null is not a pack name", !Actions.isPackName(null))
+check("an ordinary pack name passes", Actions.isPackName("devtools"))
+check("dots and dashes pass inside a name", Actions.isPackName("dev.tools-2_x"))
+
+// A pack ships in by hand now, so it must not be able to pose as a shipped action.
+function merged(entries) {
+  return Actions.mergeCatalog(entries).map(function(a) { return a.id + ":" + a.origin })
+}
+function entriesOf(origin, source, body) {
+  return Actions.loadCatalog(scan(origin, source, body)).entries
+}
+
+const shadow = merged([].concat(
+  entriesOf("builtin", "/plugin/actions/core.jsonc", '[{"id":"open","label":"Open","run":{"builtin":"copy"}}]'),
+  entriesOf("pack", "/u/packs/evil/actions/x.jsonc", '[{"id":"open","label":"Pwn","run":{"script":"pwn.sh"}}]')))
+equal("a pack cannot take over a built-in id", shadow.join(","), "open:builtin")
+
+const shadowDisable = merged([].concat(
+  entriesOf("builtin", "/plugin/actions/core.jsonc", '[{"id":"open","label":"Open","run":{"builtin":"copy"}}]'),
+  entriesOf("pack", "/u/packs/evil/actions/x.jsonc", '[{"id":"open","disabled":true}]')))
+equal("a pack cannot switch off a built-in id", shadowDisable.join(","), "open:builtin")
+
+const packAdds = merged([].concat(
+  entriesOf("builtin", "/plugin/actions/core.jsonc", '[{"id":"open","label":"Open","run":{"builtin":"copy"}}]'),
+  entriesOf("pack", "/u/packs/devtools/actions/x.jsonc", '[{"id":"p.new","label":"New","run":{"builtin":"copy"}}]')))
+equal("a pack may still add its own ids", packAdds.join(","), "open:builtin,p.new:pack")
+
+const userShadow = merged([].concat(
+  entriesOf("builtin", "/plugin/actions/core.jsonc", '[{"id":"open","label":"Open","run":{"builtin":"copy"}}]'),
+  entriesOf("user", "/u/actions/mine.jsonc", '[{"id":"open","label":"Mine","run":{"builtin":"copy"}}]')))
+equal("your own file still overrides a built-in", userShadow.join(","), "open:user")
+
+const userDisable = merged([].concat(
+  entriesOf("builtin", "/plugin/actions/core.jsonc", '[{"id":"open","label":"Open","run":{"builtin":"copy"}}]'),
+  entriesOf("user", "/u/actions/mine.jsonc", '[{"id":"open","disabled":true}]')))
+equal("your own file still switches off a built-in", userDisable.join(","), "")
+
+const userOverPack = merged([].concat(
+  entriesOf("pack", "/u/packs/devtools/actions/x.jsonc", '[{"id":"p.x","label":"Pack","run":{"builtin":"copy"}}]'),
+  entriesOf("user", "/u/actions/mine.jsonc", '[{"id":"p.x","label":"Mine","run":{"builtin":"copy"}}]')))
+equal("your own file still outranks a pack", userOverPack.join(","), "p.x:user")
+
+const packOverPack = merged([].concat(
+  entriesOf("pack", "/u/packs/a/actions/x.jsonc", '[{"id":"s.x","label":"A","run":{"builtin":"copy"}}]'),
+  entriesOf("pack", "/u/packs/b/actions/x.jsonc", '[{"id":"s.x","label":"B","run":{"builtin":"copy"}}]')))
+equal("two packs on one id still resolve to one", packOverPack.join(","), "s.x:pack")
+
+const builtinDupe = merged(entriesOf("builtin", "/plugin/actions/core.jsonc",
+  '[{"id":"open","label":"First","run":{"builtin":"copy"}},{"id":"open","label":"Second","run":{"builtin":"copy"}}]'))
+equal("a built-in defined twice collapses to one", builtinDupe.join(","), "open:builtin")
+
+// A bare object answers truthy for "constructor", which used to drop the action.
+const proto = merged(entriesOf("user", "/u/actions/mine.jsonc",
+  '[{"id":"constructor","label":"C","run":{"builtin":"copy"}},{"id":"toString","label":"T","run":{"builtin":"copy"}}]'))
+equal("ids that collide with Object keys survive", proto.join(","), "constructor:user,toString:user")
+
+const protoShadow = merged([].concat(
+  entriesOf("builtin", "/plugin/actions/core.jsonc", '[{"id":"constructor","label":"C","run":{"builtin":"copy"}}]'),
+  entriesOf("pack", "/u/packs/evil/actions/x.jsonc", '[{"id":"constructor","label":"Pwn","run":{"script":"pwn.sh"}}]')))
+equal("the built-in guard holds for Object keys too", protoShadow.join(","), "constructor:builtin")
 
 const grouped = Actions.groupCatalog(Actions.mergeCatalog([].concat(
   Actions.loadCatalog(scan("builtin", "/plugin/actions/core.jsonc", '[{"id":"a","label":"A","run":{"builtin":"copy"}}]')).entries,
