@@ -467,6 +467,7 @@ Panel {
 
               iconComponent: Component {
                 Text {
+                  textFormat: Text.PlainText
                   text: "󰗧"
                   color: root.armed && !root.suppressed ? root.foreground : root.dim
                   font.family: root.fontFamily
@@ -494,6 +495,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: root.blip !== null && root.blip.catalogErrors.length > 0
             width: parent.width
             text: root.blip && root.blip.catalogErrors.length > 0
@@ -599,6 +601,7 @@ Panel {
                   spacing: Style.space(1)
 
                   Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: "Search with"
                     color: root.foreground
@@ -608,6 +611,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: "Where the Search action sends the selection"
                     color: root.dim
@@ -688,6 +692,7 @@ Panel {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   width: parent.width
                   text: searchUrlRow.valid
                     ? "Enter to save."
@@ -860,6 +865,7 @@ Panel {
                   spacing: Style.space(4)
 
                   Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: (packConfirm.removing ? "Remove " : "Install ") + packConfirm.packName + "?"
                     color: root.urgent
@@ -870,6 +876,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: packConfirm.removing
                       ? "Its actions go with it. Anything you wrote under your own actions folder stays."
@@ -881,6 +888,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     visible: !packConfirm.removing && text !== ""
                     width: parent.width
                     text: root.pendingPack ? String(root.pendingPack.source) : ""
@@ -901,6 +909,7 @@ Panel {
                       spacing: Style.space(6)
 
                       Text {
+                        textFormat: Text.PlainText
                         anchors.verticalCenter: parent.verticalCenter
                         text: "Enter to confirm · Esc to cancel"
                         color: root.dim
@@ -932,6 +941,7 @@ Panel {
               }
 
               Text {
+                textFormat: Text.PlainText
                 visible: text !== "" && root.pendingPack === null
                 width: parent.width
                 // A running operation outranks a stale validation note.
@@ -947,6 +957,7 @@ Panel {
               }
 
               Text {
+                textFormat: Text.PlainText
                 visible: root.packs.length === 0
                 width: parent.width
                 text: "A pack is a git repo with actions/*.jsonc and scripts/. "
@@ -997,6 +1008,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: "1-4 tabs · ↑↓ move · ←→ change · Enter select · Esc close"
             color: root.dim
@@ -1045,6 +1057,7 @@ Panel {
         spacing: Style.space(1)
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: toggleRow.spec ? toggleRow.spec.label : ""
           color: root.foreground
@@ -1054,6 +1067,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: toggleRow.spec ? toggleRow.spec.description : ""
           color: root.dim
@@ -1105,6 +1119,7 @@ Panel {
       spacing: Style.space(6)
 
       Text {
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: "󰃢"
         color: root.dim
@@ -1113,6 +1128,7 @@ Panel {
       }
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width - parent.children[0].implicitWidth - parent.spacing
         anchors.verticalCenter: parent.verticalCenter
         text: consentRow.count + (consentRow.count === 1 ? " action" : " actions")
@@ -1159,6 +1175,7 @@ Panel {
         width: parent.width
 
         Text {
+          textFormat: Text.PlainText
           text: sliderRow.spec ? sliderRow.spec.label : ""
           color: root.foreground
           font.family: root.fontFamily
@@ -1169,6 +1186,7 @@ Panel {
 
         Text {
           id: valueText
+          textFormat: Text.PlainText
           text: (slider.dragging ? Math.round(slider.liveValue) : sliderRow.value)
             + (sliderRow.spec ? sliderRow.spec.unit : "")
           color: root.dim
@@ -1240,6 +1258,7 @@ Panel {
         spacing: Style.space(1)
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: moduleRow.module ? moduleRow.module.title : ""
           color: root.foreground
@@ -1250,6 +1269,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: moduleRow.enabledCount === moduleRow.total
             ? moduleRow.total + (moduleRow.total === 1 ? " action" : " actions")
@@ -1278,6 +1298,7 @@ Panel {
 
       Text {
         id: moduleChevron
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: moduleRow.expanded ? "󰅀" : "󰅂"
         color: root.dim
@@ -1348,6 +1369,7 @@ Panel {
         height: Style.font.caption + Style.space(4)
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: chipsArea.cursorAction
             ? String(chipsArea.cursorAction.description || chipsArea.cursorAction.label || "")
@@ -1390,6 +1412,7 @@ Panel {
       spacing: Style.spacing.xs
 
       Text {
+        textFormat: Text.PlainText
         visible: chip.glyph !== ""
         anchors.verticalCenter: parent.verticalCenter
         text: chip.glyph
@@ -1400,6 +1423,7 @@ Panel {
       }
 
       Text {
+        textFormat: Text.PlainText
         visible: chip.label !== ""
         anchors.verticalCenter: parent.verticalCenter
         text: chip.label
@@ -1447,6 +1471,7 @@ Panel {
       spacing: Style.space(8)
 
       Text {
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: "󰏗"
         color: root.foreground
@@ -1460,6 +1485,7 @@ Panel {
         spacing: Style.space(1)
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: packRow.packName
           color: root.foreground
@@ -1470,6 +1496,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: (packRow.pack ? packRow.pack.actions : 0)
             + (packRow.pack && packRow.pack.actions === 1 ? " action" : " actions")

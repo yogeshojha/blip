@@ -30,6 +30,7 @@ Item {
 
   Text {
     id: glyph
+    textFormat: Text.PlainText
     anchors.verticalCenter: parent.verticalCenter
     anchors.left: parent.left
     anchors.leftMargin: Style.spacing.rowPaddingX
@@ -57,6 +58,7 @@ Item {
 
     Text {
       id: keyText
+      textFormat: Text.PlainText
       anchors.centerIn: parent
       text: root.accelerator
       color: root.selected ? Color.accent : Util.alpha(root.ink, 0.45)
@@ -76,6 +78,7 @@ Item {
     spacing: 0
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       text: root.action ? String(root.action.label || "") : ""
       color: root.ink
@@ -85,6 +88,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       visible: root.description !== ""
       width: parent.width
       text: root.description

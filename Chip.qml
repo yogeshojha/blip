@@ -58,6 +58,7 @@ Item {
         spacing: Style.spacing.xs
 
         Text {
+          textFormat: Text.PlainText
           visible: root.glyph !== ""
           anchors.verticalCenter: parent.verticalCenter
           text: root.glyph
@@ -69,6 +70,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           visible: root.label !== ""
           anchors.verticalCenter: parent.verticalCenter
           text: root.label
@@ -89,6 +91,7 @@ Item {
 
         Text {
           id: keyText
+          textFormat: Text.PlainText
           anchors.centerIn: parent
           text: root.accelerator
           color: root.selected ? Color.accent : root.faint
