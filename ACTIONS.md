@@ -164,8 +164,9 @@ since argv never reaches a shell that would do it.
 
 `${search}` is the search engine chosen in the control panel, with the selection
 already in it. It backs `blip.search` only. `blip.search.github` carries its own
-url, so override that id if you want repos or issues rather than code. Picking Custom there takes a url of your own, where `%s` marks the
-spot the selection goes:
+url, so override that id if you want repos or issues rather than code. Picking
+Custom there takes a url of your own, where `%s` marks the spot the selection
+goes:
 
 ```
 https://github.com/search?q=%s&type=code

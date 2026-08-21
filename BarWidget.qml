@@ -6,7 +6,7 @@ import qs.Ui
 Panel {
   id: root
 
-  moduleName: "yogeshojha.blip"
+  moduleName: "io.github.yogeshojha.blip"
   ipcTarget: "blip-panel"
 
   readonly property var blip: bar && bar.shell ? bar.shell.serviceFor(moduleName) : null

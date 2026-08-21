@@ -35,8 +35,8 @@ Item {
   property double quietUntil: 0
   readonly property int settleMs: 350
 
-  // Set before opened changes: the animations read it as they start, and a binding
-  // on opened alone need not have re-evaluated by then.
+  // Set before opened changes: the animations read it as they start, and a
+  // binding on opened alone has not always caught up by then.
   property bool entering: false
   readonly property int exitMs: 130
 
@@ -476,7 +476,7 @@ Item {
         }
       }
 
-      // Linear out: an eased fade is mostly over in its first 40ms and reads as a blink.
+      // Linear out: an eased fade is mostly over in 40ms, and reads as a blink.
       Behavior on opacity {
         NumberAnimation {
           duration: root.entering ? 150 : root.exitMs

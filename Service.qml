@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import qs.Commons
 import "Detect.js" as Detect
@@ -12,7 +13,7 @@ Item {
   property var shell: null
   property var manifest: null
 
-  readonly property string pluginId: "yogeshojha.blip"
+  readonly property string pluginId: "io.github.yogeshojha.blip"
   readonly property string home: Quickshell.env("HOME")
   readonly property string pluginDir: manifest && manifest.__sourceDir ? String(manifest.__sourceDir) : ""
   readonly property string userDir: home + "/.config/omarchy/blip"
@@ -95,7 +96,7 @@ Item {
   readonly property int maxActions: Math.max(1, Number(setting("maxActions")) || 6)
   readonly property int debounceMs: Math.max(0, Number(setting("debounceMs")) || 0)
   readonly property int dwellMs: Math.max(1, Number(setting("dwellSeconds")) || 4) * 1000
-  // Long enough for a word the app selects on its way to its own menu to pass through.
+  // A word the app selects on its way to its own menu must not raise the bar.
   readonly property int contextMenuMs: 700
   readonly property var blocklist: {
     var raw = String(setting("blockedApps") || "").split(",")
@@ -726,7 +727,7 @@ Item {
 
     readonly property bool wanted: service.armed
 
-    // Unbind first: a crash leaves the bind behind and the sweep runs too early to clear it.
+    // Unbind first: a crash leaves the bind behind, and the sweep misses it.
     function apply() {
       var lua = ['hl.unbind("mouse:273")']
       if (wanted) lua.push(passiveKeys.bindLine("mouse:273", "omarchy-shell blip click right", true))
@@ -738,6 +739,17 @@ Item {
     }
 
     onWantedChanged: apply()
+  }
+
+  // A config reload drops every bind written through eval. The popup's set comes
+  // back on its next open; this one is written once.
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (!event || String(event.name) !== "configreloaded") return
+      passiveKeys.apply()
+      pointerGuard.apply()
+    }
   }
 
   Connections {
@@ -799,7 +811,7 @@ Item {
 
     function dismiss(): string { popup.close(); return "ok" }
 
-    // Routed here by the mouse binds; all non-consuming, so the click still lands behind.
+    // Routed here by the mouse binds; none of them consume the click.
     function click(button: string): string {
       var name = String(button || "")
       if (name === "right") {

@@ -42,10 +42,9 @@ the keyboard if it is already up, closes it if it already has the keyboard.
 
 Select something. The bar fades in just above the pointer, flips below it when
 there is no room, and never takes focus. Move the pointer well away and it
-closes; leave it alone and it fades after a few seconds. Click anywhere else and
-it closes there and then. Right-click and it gets out of the way of the app's
-own context menu — the click still reaches the app, so the menu opens as it
-always did.
+closes; leave it alone and it fades after a few seconds. Click elsewhere and it
+closes. Right-click and it is gone before the app's own menu is up — the click
+passes straight through to the app.
 
 | Key | |
 |---|---|
@@ -110,9 +109,9 @@ Drop a `.jsonc` in `~/.config/omarchy/blip/actions/`. No code, no restart.
 }
 ```
 
-An action can also pipe the selection through a script, call another plugin
-over IPC, ship as a pack, or replace one of Blip's own. **[ACTIONS.md](ACTIONS.md)**
-is the full reference.
+An action can also pipe the selection through a script, call another plugin over
+IPC, ship as a pack, or replace one of Blip's own.
+**[ACTIONS.md](ACTIONS.md)** is the full reference.
 
 ## Search
 
@@ -150,6 +149,15 @@ too: `omarchy-shell blip-panel toggle`.
 the bar icon* setting rather than by removing the widget from the bar: the
 entry in `shell.json` is what keeps the plugin enabled.
 
+## Remove
+
+```bash
+omarchy plugin remove io.github.yogeshojha.blip
+```
+
+That takes the plugin and its bar entry. Your actions and what you allowed live
+in `~/.config/omarchy/blip/`; delete that too if you want nothing left behind.
+
 ## Privacy
 
 - Selections are never written to disk and never logged. They go from
@@ -165,6 +173,10 @@ entry in `shell.json` is what keeps the plugin enabled.
 - Password managers are skipped by window class and title, and so is any
   selection a client marks sensitive.
 - Screen sharing disarms Blip. No bar appears over a recording or a call.
+- Blip binds keys in Hyprland while the bar is up, so an unfocused surface can
+  still hear them, and right-click for as long as it is armed. Every bind passes
+  the press through to the window underneath, and all of them go when you
+  disarm, disable, or remove Blip.
 
 ## Development
 
@@ -181,7 +193,7 @@ omarchy plugin validate .
 To run a working copy:
 
 ```bash
-rsync -a --delete --exclude .git --exclude test . ~/.config/omarchy/plugins/yogeshojha.blip/
+rsync -a --delete --exclude .git --exclude test . ~/.config/omarchy/plugins/io.github.yogeshojha.blip/
 omarchy-restart-shell
 ```
 
