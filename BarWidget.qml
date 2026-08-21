@@ -808,7 +808,7 @@ Panel {
                     id: installField
                     width: parent.width - installButton.implicitWidth - parent.spacing
                     anchors.verticalCenter: parent.verticalCenter
-                    placeholderText: "https://github.com/…/blip-pack-…"
+                    placeholderText: "https://github.com/… or ~/my-pack"
                     foreground: root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.bodySmall
@@ -947,7 +947,8 @@ Panel {
               Text {
                 visible: root.packs.length === 0
                 width: parent.width
-                text: "A pack is a git repo with actions/*.jsonc and scripts/."
+                text: "A pack is a git repo with actions/*.jsonc and scripts/. "
+                  + "A local clone installs the same way, which is how you write one."
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption

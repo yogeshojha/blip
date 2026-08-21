@@ -195,7 +195,7 @@ Item {
 
   // The panel asks before it installs, so it needs the name and any objection first.
   function packCheck(source) {
-    var src = String(source || "").replace(/^\s+|\s+$/g, "")
+    var src = Actions.expandHome(String(source || "").replace(/^\s+|\s+$/g, ""), home)
     if (packBusy) return { error: "another pack operation is running" }
     if (!Actions.isPackSource(src)) return { error: "packs install from an https:// git url or an absolute local path" }
     var name = Actions.packNameFromSource(src)
@@ -213,6 +213,10 @@ Item {
     var staging = userDir + "/packs/.staging-" + check.name
     runPack("add", check.name, ["bash", "-c",
       'set -e; [ ! -e "$2" ] || { echo "a pack named $(basename -- "$2") is already installed" >&2; exit 1; }; '
+      // git calls a plain directory a repository that does not exist, which reads
+      // as a missing folder when the folder is right there.
+      + 'case "$0" in /*) [ -d "$0" ] || { echo "no such folder: $0" >&2; exit 1; }; '
+      + '[ -d "$0/.git" ] || { echo "$0 is not a git repository - run git init there" >&2; exit 1; };; esac; '
       + 'rm -rf -- "$1"; git clone --depth 1 -- "$0" "$1"; mv -T -- "$1" "$2"',
       check.source, staging, dest])
     return "installing " + check.name

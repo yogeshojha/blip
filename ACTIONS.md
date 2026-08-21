@@ -235,7 +235,8 @@ omarchy-shell blip packUpdate devtools  # git pull --ff-only
 omarchy-shell blip packRemove devtools
 ```
 
-`packAdd` also takes an absolute local path, which is how you develop one.
+`packAdd` also takes a local path, `~` and all, which is how you develop one.
+It has to be a git repository — `git init` in the folder is enough.
 New actions appear the moment the clone lands — no restart.
 
 What a pack can and cannot do: its actions rank below your own files, so

@@ -22,6 +22,10 @@ the file it was minified in, decoded base64 lands where the blob was. `c`
 copies instead, `Esc` walks away, and the result is on the clipboard either
 way, so a window that cannot take the paste costs you nothing.
 
+Blip is not just an extension for Omarchy. It is an ecosystem of its own. Every
+action on the bar is a small file, the ones that ship are written exactly the way
+yours would be, and anyone can build their own and share them.
+
 ## Install
 
 ```bash
@@ -97,6 +101,10 @@ lowercase word that happens to decode is not base64.
 
 ## Add your own
 
+Blip's own actions get no special treatment. They are JSONC files in the same
+format, read from the same kind of folder, and anything you write beats them.
+Reuse an id to replace one, or switch it off entirely.
+
 Drop a `.jsonc` in `~/.config/omarchy/blip/actions/`. No code, no restart.
 
 ```jsonc
@@ -109,8 +117,20 @@ Drop a `.jsonc` in `~/.config/omarchy/blip/actions/`. No code, no restart.
 }
 ```
 
-An action can also pipe the selection through a script, call another plugin over
-IPC, ship as a pack, or replace one of Blip's own.
+An action can open a url, run a script over the selection, or call another
+plugin over IPC and show whatever comes back.
+
+Bundle a few into a git repository and you have a pack. Anyone can install it in
+one line:
+
+```bash
+omarchy-shell blip packAdd https://github.com/…/blip-pack-…
+```
+
+A pack can teach Blip to spot things it has never heard of. A regex is enough to
+turn a bare hostname, a ticket id or an order number into something the bar
+answers.
+
 **[ACTIONS.md](ACTIONS.md)** is the full reference.
 
 ## Search
