@@ -193,22 +193,29 @@ Item {
     return false
   }
 
-  function packAdd(source) {
+  // The panel asks before it installs, so it needs the name and any objection first.
+  function packCheck(source) {
     var src = String(source || "").replace(/^\s+|\s+$/g, "")
-    if (packBusy) return "error: another pack operation is running"
-    if (!Actions.isPackSource(src)) return "error: packs install from an https:// git url or an absolute local path"
+    if (packBusy) return { error: "another pack operation is running" }
+    if (!Actions.isPackSource(src)) return { error: "packs install from an https:// git url or an absolute local path" }
     var name = Actions.packNameFromSource(src)
-    if (!name) return "error: cannot derive a pack name from '" + src + "'"
-    if (hasPack(name)) return "error: pack '" + name + "' is already installed"
+    if (!name) return { error: "cannot derive a pack name from '" + src + "'" }
+    if (hasPack(name)) return { error: "pack '" + name + "' is already installed" }
+    return { error: "", name: name, source: src }
+  }
+
+  function packAdd(source) {
+    var check = packCheck(source)
+    if (check.error) return "error: " + check.error
     // Staged in a dot-prefixed dir the scanner skips, moved into place in
     // one step, so the catalog never sees half a pack.
-    var dest = userDir + "/packs/" + name
-    var staging = userDir + "/packs/.staging-" + name
-    runPack("add", name, ["bash", "-c",
+    var dest = userDir + "/packs/" + check.name
+    var staging = userDir + "/packs/.staging-" + check.name
+    runPack("add", check.name, ["bash", "-c",
       'set -e; [ ! -e "$2" ] || { echo "a pack named $(basename -- "$2") is already installed" >&2; exit 1; }; '
       + 'rm -rf -- "$1"; git clone --depth 1 -- "$0" "$1"; mv -T -- "$1" "$2"',
-      src, staging, dest])
-    return "installing " + name
+      check.source, staging, dest])
+    return "installing " + check.name
   }
 
   function packUpdate(name) {

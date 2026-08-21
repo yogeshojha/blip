@@ -243,7 +243,8 @@ anything you define with the same id wins; a *declared* network action stays
 hidden until network actions are allowed, and the first send still asks,
 naming the host. But a pack's scripts run as you when you click their action,
 and a script that does not declare its traffic is not caught by anything —
-so install packs the way you install plugins: from authors you trust.
+so install packs the way you install plugins: from authors you trust. The panel
+asks before it installs or removes one, and says what it is about to run.
 
 ## Command line
 

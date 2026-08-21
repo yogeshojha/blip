@@ -138,7 +138,8 @@ behaviour toggles, the search engine, and a row per module. A module opens into
 a grid of chips — the same chips the bar shows — and clicking one turns that
 action off or on, so you can drop the text tools, or just `Run`, without
 touching a file; the module's switch, or `Space`, flips them all at once. Packs
-install from a pasted git URL and update or remove from the same fold — see
+install from a pasted git URL and update or remove from the same fold, and
+installing or removing one asks first — see
 [ACTIONS.md](ACTIONS.md#action-packs) — and the sliders sit folded under
 *Fine-tuning*, values readable on the closed row. `↑↓` move, `←→` fold and
 unfold, `Enter` selects. Right-click the icon to arm and disarm without opening
