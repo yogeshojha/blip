@@ -178,6 +178,14 @@ Item {
     return false
   }
 
+  function isModifierKey(key) {
+    return key === Qt.Key_Shift || key === Qt.Key_Control || key === Qt.Key_Alt
+      || key === Qt.Key_AltGr || key === Qt.Key_Meta
+      || key === Qt.Key_CapsLock || key === Qt.Key_NumLock || key === Qt.Key_ScrollLock
+      || key === Qt.Key_Super_L || key === Qt.Key_Super_R
+      || key === Qt.Key_Hyper_L || key === Qt.Key_Hyper_R
+  }
+
   function showResult(payload) {
     quietUntil = Date.now() + settleMs
     busy = false
@@ -396,6 +404,7 @@ Item {
       focus: root.keyboardActive
 
       Keys.onPressed: function(event) {
+        if (root.isModifierKey(event.key)) return // don't close on modifier
         if (event.key === Qt.Key_Escape) { root.back(); event.accepted = true; return }
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
           root.pressReturn()
@@ -419,10 +428,17 @@ Item {
             return
           }
           if (event.text === "c") { root.copyResult(); event.accepted = true; return }
-          if (event.text === "r" && root.replaceResult()) event.accepted = true
+          if (event.text === "r" && root.replaceResult()) { event.accepted = true; return }
+          // unbound key closes popup
+          root.close()
+          event.accepted = true
           return
         }
-        if (root.pendingConfirm) return
+        if (root.pendingConfirm) {
+          root.close()
+          event.accepted = true
+          return
+        }
         if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
           if (root.hasOverflow) root.setExpanded(!root.expanded)
           event.accepted = true
@@ -435,8 +451,13 @@ Item {
           event.accepted = true
           return
         }
-        if (event.text && event.text.length === 1 && root.activateByKey(event.text.toLowerCase()))
+        if (event.text && event.text.length === 1 && root.activateByKey(event.text.toLowerCase())) {
           event.accepted = true
+          return
+        }
+        // unbound key closes popup
+        root.close()
+        event.accepted = true
       }
     }
 
