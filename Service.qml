@@ -660,6 +660,19 @@ Item {
     // One missed character is the worst a collision can cost.
     property bool disarmed: false
 
+    // Coalesces same-tick apply() calls so a bind and its own immediate
+    // unbind don't dispatch as two unordered hyprctl eval processes, which
+    // can race and leave a key stuck bound.
+    property bool applyQueued: false
+    function queueApply() {
+      if (applyQueued) return
+      applyQueued = true
+      Qt.callLater(function() {
+        applyQueued = false
+        apply()
+      })
+    }
+
     // A result binds no filler: a stray key must not wipe out what is being read.
     function keyPlan() {
       // Read the result itself: a sibling binding has not always caught up
@@ -842,7 +855,7 @@ Item {
     target: Hyprland
     function onRawEvent(event) {
       if (!event || String(event.name) !== "configreloaded") return
-      passiveKeys.apply()
+      passiveKeys.queueApply()
       gestureGuard.apply()
     }
   }
@@ -851,13 +864,13 @@ Item {
     target: popup
     function onOpenedChanged() {
       if (!popup.opened) passiveKeys.disarmed = false
-      passiveKeys.apply()
+      passiveKeys.queueApply()
     }
-    function onKeyboardActiveChanged() { passiveKeys.apply() }
-    function onModeChanged() { passiveKeys.apply() }
-    function onExpandedChanged() { passiveKeys.apply() }
-    function onNavigatedChanged() { passiveKeys.apply() }
-    function onAdoptedChanged() { passiveKeys.apply() }
+    function onKeyboardActiveChanged() { passiveKeys.queueApply() }
+    function onModeChanged() { passiveKeys.queueApply() }
+    function onExpandedChanged() { passiveKeys.queueApply() }
+    function onNavigatedChanged() { passiveKeys.queueApply() }
+    function onAdoptedChanged() { passiveKeys.queueApply() }
   }
 
   Component.onDestruction: {

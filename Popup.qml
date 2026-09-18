@@ -30,7 +30,6 @@ Item {
   property string notice: ""
   property bool busy: false
 
-  property bool focusPrimed: false
   property bool morphEnabled: false
 
   // Moved forward on every change a click could be racing; see pressPointer.
@@ -113,10 +112,8 @@ Item {
     opened = false
     keyboardActive = false
     trusted = false
-    focusPrimed = false
     busy = false
     morphEnabled = false
-    primeTimer.stop()
     morphTimer.stop()
     dwellTimer.stop()
     noticeTimer.stop()
@@ -126,12 +123,7 @@ Item {
     keyboardActive = active
     if (active) {
       if (index < 0) index = 0
-      focusPrimed = false
-      primeTimer.restart()
       Qt.callLater(function() { keys.forceActiveFocus() })
-    } else {
-      primeTimer.stop()
-      focusPrimed = false
     }
     restartDwell()
   }
@@ -184,6 +176,14 @@ Item {
       return true
     }
     return false
+  }
+
+  function isModifierKey(key) {
+    return key === Qt.Key_Shift || key === Qt.Key_Control || key === Qt.Key_Alt
+      || key === Qt.Key_AltGr || key === Qt.Key_Meta
+      || key === Qt.Key_CapsLock || key === Qt.Key_NumLock || key === Qt.Key_ScrollLock
+      || key === Qt.Key_Super_L || key === Qt.Key_Super_R
+      || key === Qt.Key_Hyper_L || key === Qt.Key_Hyper_R
   }
 
   function showResult(payload) {
@@ -316,12 +316,6 @@ Item {
   }
 
   Timer {
-    id: primeTimer
-    interval: 75
-    onTriggered: if (root.opened && root.keyboardActive) root.focusPrimed = true
-  }
-
-  Timer {
     id: morphTimer
     interval: 200
     onTriggered: root.morphEnabled = root.opened
@@ -397,8 +391,9 @@ Item {
     color: "transparent"
     WlrLayershell.namespace: "blip"
     WlrLayershell.layer: WlrLayer.Overlay
+    // Exclusive for the whole keyboard-active span: under follow_mouse, OnDemand loses focus to whatever's under a stray pointer move.
     WlrLayershell.keyboardFocus: root.opened && root.keyboardActive
-      ? (root.focusPrimed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive)
+      ? WlrKeyboardFocus.Exclusive
       : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     mask: Region { item: root.opened ? card : null }
@@ -409,6 +404,7 @@ Item {
       focus: root.keyboardActive
 
       Keys.onPressed: function(event) {
+        if (root.isModifierKey(event.key)) return // don't close on modifier
         if (event.key === Qt.Key_Escape) { root.back(); event.accepted = true; return }
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
           root.pressReturn()
@@ -432,10 +428,17 @@ Item {
             return
           }
           if (event.text === "c") { root.copyResult(); event.accepted = true; return }
-          if (event.text === "r" && root.replaceResult()) event.accepted = true
+          if (event.text === "r" && root.replaceResult()) { event.accepted = true; return }
+          // unbound key closes popup
+          root.close()
+          event.accepted = true
           return
         }
-        if (root.pendingConfirm) return
+        if (root.pendingConfirm) {
+          root.close()
+          event.accepted = true
+          return
+        }
         if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
           if (root.hasOverflow) root.setExpanded(!root.expanded)
           event.accepted = true
@@ -448,8 +451,13 @@ Item {
           event.accepted = true
           return
         }
-        if (event.text && event.text.length === 1 && root.activateByKey(event.text.toLowerCase()))
+        if (event.text && event.text.length === 1 && root.activateByKey(event.text.toLowerCase())) {
           event.accepted = true
+          return
+        }
+        // unbound key closes popup
+        root.close()
+        event.accepted = true
       }
     }
 
