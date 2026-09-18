@@ -22,6 +22,27 @@ Item {
     root.entry = copy
   }
 
+  // Blip is a bar widget, so Omarchy's updateEntryInline() persists its entry
+  // inside bar.layout.<section>, falling back to the top-level plugins array
+  // only when the id isn't found there (see shell.qml). This mirrors that
+  // same lookup order, or every read misses the entry and finds only {}.
+  function findEntry(parsed) {
+    var sections = ["left", "center", "right"]
+    var layout = parsed && parsed.bar ? parsed.bar.layout : null
+    for (var s = 0; s < sections.length; s++) {
+      var list = layout ? layout[sections[s]] : null
+      if (!Array.isArray(list)) continue
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && String(list[i].id || "") === root.pluginId) return list[i]
+      }
+    }
+    var plugins = parsed && Array.isArray(parsed.plugins) ? parsed.plugins : []
+    for (var j = 0; j < plugins.length; j++) {
+      if (plugins[j] && String(plugins[j].id || "") === root.pluginId) return plugins[j]
+    }
+    return {}
+  }
+
   function parse() {
     var raw = ""
     try { raw = String(settingsFile.text() || "") } catch (e) { raw = "" }
@@ -31,16 +52,7 @@ Item {
       return
     }
     try {
-      var parsed = JSON.parse(raw)
-      var entries = parsed && Array.isArray(parsed.plugins) ? parsed.plugins : []
-      var selected = {}
-      for (var i = 0; i < entries.length; i++) {
-        if (entries[i] && String(entries[i].id || "") === root.pluginId) {
-          selected = entries[i]
-          break
-        }
-      }
-      root.entry = selected
+      root.entry = findEntry(JSON.parse(raw))
       root.loaded = true
     } catch (e) {
       console.warn("cannot read saved plugin settings: " + e)
